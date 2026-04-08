@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Film, Play, Pause, Eye } from 'lucide-react';
+import { Film, Play, Pause, Rewind, FastForward } from 'lucide-react';
 
 interface VideoPreviewProps {
   videoFile: File | null;
@@ -168,7 +168,7 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
 
   const [videoUrl, setVideoUrl] = useState('');
   const [lutActive, setLutActive] = useState(false);
-  const [showOriginal, setShowOriginal] = useState(false);
+  const [splitPos, setSplitPos] = useState(50);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [dur, setDur] = useState(0);
@@ -190,7 +190,7 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
     rendererRef.current?.dispose();
     rendererRef.current = null;
     setLutActive(false);
-    setShowOriginal(false);
+    setSplitPos(50);
     setPlaying(false);
     setTime(0);
     setDur(0);
@@ -239,7 +239,6 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
     if (!lutFile) {
       rendererRef.current?.setLut(null);
       setLutActive(false);
-      setShowOriginal(false);
       return;
     }
 
@@ -274,16 +273,23 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
 
   useEffect(() => {
     cancelAnimationFrame(rafRef.current);
-    if (lutActive && !showOriginal) {
+    if (lutActive) {
       rafRef.current = requestAnimationFrame(tick);
     }
     return () => cancelAnimationFrame(rafRef.current);
-  }, [lutActive, showOriginal, tick]);
+  }, [lutActive, tick]);
 
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
     v.paused ? v.play() : v.pause();
+  };
+
+  const skipBack = () => {
+    if (videoRef.current) videoRef.current.currentTime -= 10;
+  };
+  const skipForward = () => {
+    if (videoRef.current) videoRef.current.currentTime += 10;
   };
 
   const seek = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -293,7 +299,6 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
     v.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * dur;
   };
 
-  const showCanvas = lutActive && !showOriginal;
   const pct = dur > 0 ? (time / dur) * 100 : 0;
 
   return (
@@ -305,28 +310,36 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
               ref={videoRef}
               src={videoUrl || undefined}
               muted loop autoPlay playsInline
-              style={{ display: showCanvas ? 'none' : 'block' }}
+              style={{ display: 'block', width: '100%', height: '100%' }}
             />
             <canvas
               ref={canvasRef}
-              style={{ display: showCanvas ? 'block' : 'none' }}
+              style={{
+                display: lutActive ? 'block' : 'none',
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                clipPath: `polygon(0 0, ${splitPos}% 0, ${splitPos}% 100%, 0 100%)`
+              }}
             />
 
-            <div className="preview-badge">
+            <div className="preview-badge" style={{ zIndex: 20 }}>
               <span className="preview-badge-dot" />
-              {lutActive ? (showOriginal ? 'Original' : 'LUT Active') : 'Live'}
+              {lutActive ? 'LUT Applied' : 'Live'}
             </div>
 
             {lutActive && (
-              <button
-                className="ba-toggle"
-                onMouseDown={() => setShowOriginal(true)}
-                onMouseUp={() => setShowOriginal(false)}
-                onMouseLeave={() => setShowOriginal(false)}
-              >
-                <Eye style={{ width: 10, height: 10, display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
-                Hold for Original
-              </button>
+              <>
+                <div className="split-line" style={{ left: `${splitPos}%` }} />
+                <input 
+                  type="range" 
+                  min="0" max="100" 
+                  value={splitPos} 
+                  onChange={(e) => setSplitPos(Number(e.target.value))}
+                  className="split-slider" 
+                />
+              </>
             )}
           </div>
         ) : (
@@ -339,13 +352,22 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
       </div>
 
       {videoUrl && (
-        <div className="timeline">
-          <button className="tl-btn" onClick={togglePlay}>
-            {playing
-              ? <Pause style={{ width: 12, height: 12 }} />
-              : <Play style={{ width: 12, height: 12 }} />}
-          </button>
-          <div className="tl-track" onClick={seek}>
+        <div className="timeline" style={{ justifyContent: 'center' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button className="tl-btn" onClick={skipBack}>
+              <Rewind style={{ width: 14, height: 14 }} />
+            </button>
+            <button className="tl-btn" onClick={togglePlay}>
+              {playing
+                ? <Pause style={{ width: 14, height: 14 }} />
+                : <Play style={{ width: 14, height: 14 }} />}
+            </button>
+            <button className="tl-btn" onClick={skipForward}>
+              <FastForward style={{ width: 14, height: 14 }} />
+            </button>
+          </div>
+          
+          <div className="tl-track" onClick={seek} style={{ marginLeft: '1rem', flex: 1 }}>
             <div className="tl-fill" style={{ width: `${pct}%` }} />
           </div>
           <span className="tl-time">{fmt(time)} / {fmt(dur)}</span>

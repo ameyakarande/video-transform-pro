@@ -193,26 +193,50 @@ body {
 .preview-placeholder p { font-weight: 600; font-size: 0.85rem; color: var(--text-secondary); }
 .preview-placeholder span { font-size: 0.7rem; }
 
-/* Before/After Slider */
-.ba-toggle {
+/* Before/After Split Slider */
+.split-slider {
   position: absolute;
-  bottom: 10px;
-  right: 10px;
-  z-index: 5;
-  padding: 4px 10px;
-  border-radius: 100px;
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255,255,255,0.1);
-  color: white;
-  font-size: 0.6rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: background 0.15s;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: ew-resize;
+  z-index: 10;
+  margin: 0;
+  appearance: none;
 }
-.ba-toggle:hover { background: rgba(255,255,255,0.15); }
+.split-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 400px; /* Big enough to catch drag easily over the entire height */
+  background: transparent;
+  cursor: ew-resize;
+}
+
+.split-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: white;
+  z-index: 5;
+  pointer-events: none;
+  box-shadow: 0 0 8px rgba(0,0,0,0.8);
+}
+
+.split-line::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(0,0,0,0.8);
+}
 
 /* ---- Timeline ---- */
 .timeline {
@@ -291,6 +315,86 @@ body {
   color: var(--text-dim);
   margin-bottom: 0.75rem;
 }
+
+/* Tabs */
+.tabs-header {
+  display: flex;
+  gap: 0.2rem;
+  margin-bottom: 0.75rem;
+  background: var(--bg-raised);
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 0.4rem;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tab-btn.active {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.presets-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+.preset-tile {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--bg-raised);
+}
+
+.preset-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.1) 60%);
+  transition: opacity 0.2s;
+}
+
+.preset-tile:hover {
+  border-color: var(--accent);
+}
+
+.preset-tile:hover::before {
+  opacity: 0.7;
+}
+
+.preset-tile span {
+  position: absolute;
+  bottom: 0.4rem;
+  left: 0.5rem;
+  right: 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: white;
+  z-index: 2;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 
 /* Upload cards */
 .upload-grid {

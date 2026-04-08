@@ -1,4 +1,4 @@
-import React, { type ChangeEvent } from 'react';
+import React, { type ChangeEvent, useState, useEffect } from 'react';
 import {
   Upload,
   Palette,
@@ -45,6 +45,39 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   isProcessing,
   progress,
 }) => {
+  const [importTab, setImportTab] = useState<'custom' | 'presets'>('custom');
+
+  const [presetsList, setPresetsList] = useState<Array<{ id: string, name: string, cubePath: string, imagePath: string }>>([]);
+
+  // Dynamically discover all presets dropped into the public/presets folder at runtime!
+  useEffect(() => {
+    let active = true;
+    const discoverPresets = async () => {
+      const found = [];
+      // We check paths lut1 through lut30.
+      for (let i = 1; i <= 30; i++) {
+        const cubePath = `/presets/lut${i}.cube`;
+        try {
+          // A fast HEAD request just to check if the file exists on the server
+          const res = await fetch(cubePath, { method: 'HEAD' });
+          if (res.ok) {
+            found.push({
+              id: i.toString(),
+              name: `Preset ${i}`,
+              cubePath,
+              imagePath: `/presets/lut${i}.jpg`
+            });
+          }
+        } catch (err) {
+          // Ignore network errors on missing files
+        }
+      }
+      if (active) setPresetsList(found);
+    };
+    discoverPresets();
+    return () => { active = false; };
+  }, []);
+
   const handleVideoFile = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) onVideoUpload(e.target.files[0]);
   };
@@ -54,30 +87,14 @@ const EditorControls: React.FC<EditorControlsProps> = ({
 
   return (
     <div className="controls">
-      {/* Upload */}
+      {/* Video Source */}
       <div className="ctrl-section">
-        <div className="ctrl-label">Import</div>
-        <div className="upload-grid">
-          <label className="upload-card">
-            <Upload style={{ width: 18, height: 18 }} />
-            <span>Video</span>
-            <input type="file" accept="video/*" hidden onChange={handleVideoFile} />
-          </label>
-          <label className="upload-card">
-            <Palette style={{ width: 18, height: 18 }} />
-            <span>LUT (.cube)</span>
-            <input type="file" accept=".cube" hidden onChange={handleLutFile} />
-          </label>
-        </div>
-        {lutFile && (
-          <div className="lut-info">
-            <span className="lut-info-name">🎨 {lutFile.name}</span>
-            <button className="lut-clear" onClick={onLutClear}>
-              <X style={{ width: 10, height: 10, display: 'inline', verticalAlign: 'middle', marginRight: 2 }} />
-              Clear
-            </button>
-          </div>
-        )}
+        <div className="ctrl-label">Source Video</div>
+        <label className="upload-card" style={{ flexDirection: 'row', padding: '0.8rem' }}>
+          <Upload style={{ width: 18, height: 18 }} />
+          <span>Upload Video File</span>
+          <input type="file" accept="video/*" hidden onChange={handleVideoFile} />
+        </label>
       </div>
 
       {/* Format */}
@@ -97,6 +114,60 @@ const EditorControls: React.FC<EditorControlsProps> = ({
             <Smartphone style={{ width: 12, height: 12 }} /> Reels 9:16
           </button>
         </div>
+      </div>
+
+      {/* Color Grading */}
+      <div className="ctrl-section">
+        <div className="ctrl-label">Color Grading</div>
+        
+        <div className="tabs-header">
+          <button className={`tab-btn ${importTab === 'custom' ? 'active' : ''}`} onClick={() => setImportTab('custom')}>Custom</button>
+          <button className={`tab-btn ${importTab === 'presets' ? 'active' : ''}`} onClick={() => setImportTab('presets')}>Presets</button>
+        </div>
+
+        {importTab === 'custom' ? (
+          <label className="upload-card" style={{ padding: '1rem' }}>
+            <Palette style={{ width: 18, height: 18 }} />
+            <span>Upload LUT (.cube)</span>
+            <input type="file" accept=".cube" hidden onChange={handleLutFile} />
+          </label>
+        ) : (
+          <div className="presets-grid">
+            {presetsList.length === 0 && (
+              <p style={{ gridColumn: 'span 2', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.7rem', padding: '1rem' }}>
+                No presets found. Drop .cube files in public/presets/
+              </p>
+            )}
+            {presetsList.map((preset) => (
+              <button 
+                key={preset.id}
+                className="preset-tile"
+                style={{ backgroundImage: `url(${preset.imagePath})` }}
+                onClick={async () => {
+                  try {
+                    const res = await fetch(preset.cubePath);
+                    if (!res.ok) throw new Error();
+                    const blob = await res.blob();
+                    onLutUpload(new File([blob], `${preset.name}.cube`));
+                  } catch (err) {
+                    alert(`Could not find ${preset.cubePath}. Please ensure the file is in the public/presets folder.`);
+                  }
+                }}
+              >
+                <span>{preset.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {lutFile && (
+          <div className="lut-info">
+            <span className="lut-info-name">🎨 {lutFile.name}</span>
+            <button className="lut-clear" onClick={onLutClear}>
+              <X style={{ width: 10, height: 10, display: 'inline', verticalAlign: 'middle', marginRight: 2 }} />
+              Clear
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Trim */}
