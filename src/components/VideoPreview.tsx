@@ -1,13 +1,40 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Film, Play, Pause, Rewind, FastForward } from 'lucide-react';
+import { Film, Play, Pause, Rewind, FastForward, X, Type } from 'lucide-react';
+
+interface OverlayItem {
+  id: string;
+  type: 'text' | 'image' | 'video';
+  content: string;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  startTime: number;
+  endTime: number;
+}
+
+interface SubtitleItem {
+  start: number;
+  end: number;
+  text: string;
+}
 
 interface VideoPreviewProps {
   videoFile: File | null;
   startTime: number;
   endTime: number;
   format: 'youtube' | 'instagram';
-  lutFile: File | null;
+  lutFiles: File[];
   onDurationLoaded?: (duration: number) => void;
+  speed: number;
+  isMuted: boolean;
+  overlays: OverlayItem[];
+  setOverlays: React.Dispatch<React.SetStateAction<OverlayItem[]>>;
+  subtitles: SubtitleItem[];
+  isStabilized: boolean;
+  objectFit: 'cover' | 'contain';
+  selectedOverlayId: string | null;
+  setSelectedOverlayId: (id: string | null) => void;
 }
 
 // Parse .cube LUT file
@@ -59,15 +86,16 @@ function createLutRenderer(canvas: HTMLCanvasElement) {
     in vec2 v_uv;
     out vec4 outColor;
     uniform sampler2D u_video;
-    uniform sampler3D u_lut;
-    uniform bool u_lutOn;
+    uniform sampler3D u_lut1;
+    uniform sampler3D u_lut2;
+    uniform sampler3D u_lut3;
+    uniform int u_lutCount;
     void main() {
       vec4 c = texture(u_video, v_uv);
-      if (u_lutOn) {
-        outColor = vec4(texture(u_lut, c.rgb).rgb, c.a);
-      } else {
-        outColor = c;
-      }
+      if (u_lutCount >= 1) c.rgb = texture(u_lut1, c.rgb).rgb;
+      if (u_lutCount >= 2) c.rgb = texture(u_lut2, c.rgb).rgb;
+      if (u_lutCount >= 3) c.rgb = texture(u_lut3, c.rgb).rgb;
+      outColor = c;
     }
   `);
   gl.compileShader(fs);
@@ -102,33 +130,43 @@ function createLutRenderer(canvas: HTMLCanvasElement) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  const lutCountLoc = gl.getUniformLocation(prog, 'u_lutCount');
+  gl.uniform1i(lutCountLoc, 0);
+
+  // Set explicit sampler locations during initialization
   gl.uniform1i(gl.getUniformLocation(prog, 'u_video'), 0);
-  gl.uniform1i(gl.getUniformLocation(prog, 'u_lut'), 1);
+  gl.uniform1i(gl.getUniformLocation(prog, 'u_lut1'), 1);
+  gl.uniform1i(gl.getUniformLocation(prog, 'u_lut2'), 2);
+  gl.uniform1i(gl.getUniformLocation(prog, 'u_lut3'), 3);
 
-  const lutOnLoc = gl.getUniformLocation(prog, 'u_lutOn');
-  gl.uniform1i(lutOnLoc, 0);
-
-  let lutTex: WebGLTexture | null = null;
+  let lut1Tex: WebGLTexture | null = null;
+  let lut2Tex: WebGLTexture | null = null;
+  let lut3Tex: WebGLTexture | null = null;
 
   return {
-    setLut(lut: { size: number; data: Uint8Array } | null) {
-      if (!lut) {
-        gl.uniform1i(lutOnLoc, 0);
-        return;
-      }
-      if (lutTex) gl.deleteTexture(lutTex);
-      lutTex = gl.createTexture()!;
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_3D, lutTex);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      // RGBA8 + UNSIGNED_BYTE is universally supported in WebGL2
-      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8, lut.size, lut.size, lut.size, 0, gl.RGBA, gl.UNSIGNED_BYTE, lut.data);
-      gl.uniform1i(lutOnLoc, 1);
-      console.log(`LUT loaded: ${lut.size}x${lut.size}x${lut.size}`);
+    setLuts(luts: ({ size: number; data: Uint8Array } | null)[]) {
+      const activeLuts = luts.filter(l => l !== null);
+      gl.uniform1i(lutCountLoc, activeLuts.length);
+      
+      [lut1Tex, lut2Tex, lut3Tex].forEach((tex) => {
+        if (tex) gl.deleteTexture(tex);
+      });
+      lut1Tex = lut2Tex = lut3Tex = null;
+
+      activeLuts.forEach((lut, i) => {
+        const tex = gl.createTexture()!;
+        gl.activeTexture(gl.TEXTURE1 + i);
+        gl.bindTexture(gl.TEXTURE_3D, tex);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8, lut!.size, lut!.size, lut!.size, 0, gl.RGBA, gl.UNSIGNED_BYTE, lut!.data);
+        if (i === 0) lut1Tex = tex;
+        else if (i === 1) lut2Tex = tex;
+        else if (i === 2) lut3Tex = tex;
+      });
     },
     render(video: HTMLVideoElement) {
       const c = gl.canvas as HTMLCanvasElement;
@@ -139,12 +177,16 @@ function createLutRenderer(canvas: HTMLCanvasElement) {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, videoTex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
-      if (lutTex) { gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_3D, lutTex); }
+      
+      if (lut1Tex) { gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_3D, lut1Tex); }
+      if (lut2Tex) { gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_3D, lut2Tex); }
+      if (lut3Tex) { gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_3D, lut3Tex); }
+      
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     },
     dispose() {
       gl.deleteTexture(videoTex);
-      if (lutTex) gl.deleteTexture(lutTex);
+      [lut1Tex, lut2Tex, lut3Tex].forEach(t => t && gl.deleteTexture(t));
       gl.deleteProgram(prog);
     },
   };
@@ -158,7 +200,9 @@ function fmt(s: number) {
 }
 
 const VideoPreview: React.FC<VideoPreviewProps> = ({
-  videoFile, startTime, endTime, format, lutFile, onDurationLoaded,
+  videoFile, startTime, endTime, format, lutFiles, onDurationLoaded,
+  speed, isMuted, overlays, setOverlays, subtitles, isStabilized,
+  objectFit, selectedOverlayId, setSelectedOverlayId
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -167,11 +211,12 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
   const aliveRef = useRef(true);
 
   const [videoUrl, setVideoUrl] = useState('');
-  const [lutActive, setLutActive] = useState(false);
+  const [lutCount, setLutCount] = useState(0);
   const [splitPos, setSplitPos] = useState(50);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
-  const [dur, setDur] = useState(0);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [resizingId, setResizingId] = useState<string | null>(null);
 
   // Mount/unmount
   useEffect(() => {
@@ -189,11 +234,10 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
     cancelAnimationFrame(rafRef.current);
     rendererRef.current?.dispose();
     rendererRef.current = null;
-    setLutActive(false);
+    setLutCount(0);
     setSplitPos(50);
     setPlaying(false);
     setTime(0);
-    setDur(0);
 
     if (videoFile) {
       const u = URL.createObjectURL(videoFile);
@@ -208,9 +252,8 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
     const v = videoRef.current;
     if (!v || !videoUrl) return;
 
-    const onMeta = () => {
+      const onMeta = () => {
       if (!aliveRef.current) return;
-      setDur(v.duration);
       onDurationLoaded?.(v.duration);
       v.currentTime = startTime;
     };
@@ -234,31 +277,34 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
     };
   }, [videoUrl, startTime, endTime, onDurationLoaded]);
 
-  // Parse LUT
+  // Parse LUTs
   useEffect(() => {
-    if (!lutFile) {
-      rendererRef.current?.setLut(null);
-      setLutActive(false);
+    if (lutFiles.length === 0) {
+      rendererRef.current?.setLuts([]);
+      setLutCount(0);
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (!aliveRef.current) return;
-      const parsed = parseCubeFile(e.target?.result as string);
-      if (!parsed) return;
+    const loadAll = async () => {
+      const parsed = await Promise.all(lutFiles.map(file => {
+        return new Promise<{size: number, data: Uint8Array} | null>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(parseCubeFile(e.target?.result as string));
+          reader.readAsText(file);
+        });
+      }));
 
-      // Ensure renderer exists
+      if (!aliveRef.current) return;
       if (!rendererRef.current && canvasRef.current) {
         rendererRef.current = createLutRenderer(canvasRef.current);
       }
       if (rendererRef.current) {
-        rendererRef.current.setLut(parsed);
-        setLutActive(true);
+        rendererRef.current.setLuts(parsed);
+        setLutCount(parsed.filter(Boolean).length);
       }
     };
-    reader.readAsText(lutFile);
-  }, [lutFile]);
+    loadAll();
+  }, [lutFiles]);
 
   // Render loop — only when LUT is active and not showing original
   const tick = useCallback(() => {
@@ -273,11 +319,19 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
 
   useEffect(() => {
     cancelAnimationFrame(rafRef.current);
-    if (lutActive) {
+    if (lutCount > 0) {
       rafRef.current = requestAnimationFrame(tick);
     }
     return () => cancelAnimationFrame(rafRef.current);
-  }, [lutActive, tick]);
+  }, [lutCount, tick]);
+
+  // Apply speed and mute when they change
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = speed;
+      videoRef.current.muted = isMuted;
+    }
+  }, [speed, isMuted, videoUrl]);
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -294,42 +348,223 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
 
   const seek = (e: React.MouseEvent<HTMLDivElement>) => {
     const v = videoRef.current;
-    if (!v || !dur) return;
+    if (!v || !trimmedDuration) return;
     const r = e.currentTarget.getBoundingClientRect();
-    v.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * dur;
+    v.currentTime = startTime + (Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * trimmedDuration);
   };
 
-  const pct = dur > 0 ? (time / dur) * 100 : 0;
+  const relativeTime = Math.max(0, time - startTime);
+  const trimmedDuration = Math.max(0.1, endTime - startTime);
+  const pct = (relativeTime / trimmedDuration) * 100;
+  const currentSubtitle = subtitles.find(s => time >= s.start && time <= s.end);
 
+  const handleDrag = (_id: string, e: React.MouseEvent | React.TouchEvent) => {
+    if (!draggingId) return;
+    const viewport = e.currentTarget.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    
+    const x = ((clientX - viewport.left) / viewport.width) * 100;
+    const y = ((clientY - viewport.top) / viewport.height) * 100;
+    
+    setOverlays(overlays.map(ov => ov.id === draggingId ? { ...ov, x, y } : ov));
+  };
+
+  useEffect(() => {
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (resizingId) {
+        const viewport = videoRef.current?.parentElement?.getBoundingClientRect();
+        if (!viewport) return;
+        
+        const ov = overlays.find((o) => o.id === resizingId);
+        if (!ov) return;
+        
+        // Calculate distance from mouse to center of overlay (ov.x, ov.y) in percent
+        const centerX = (ov.x / 100) * viewport.width;
+        const centerY = (ov.y / 100) * viewport.height;
+        
+        const dx = Math.abs(e.clientX - viewport.left - centerX);
+        const dy = Math.abs(e.clientY - viewport.top - centerY);
+        
+        const newWidth = (dx * 2 / viewport.width) * 100;
+        const newHeight = (dy * 2 / viewport.height) * 100;
+        
+        setOverlays((prev) => prev.map((o) => o.id === resizingId ? { 
+          ...o, 
+          width: Math.max(5, newWidth), 
+          height: Math.max(2, newHeight) 
+        } : o));
+      }
+    };
+
+    const handleWindowMouseUp = () => {
+      setDraggingId(null);
+      setResizingId(null);
+    };
+
+    if (draggingId || resizingId) {
+      window.addEventListener('mousemove', handleWindowMouseMove);
+      window.addEventListener('mouseup', handleWindowMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [draggingId, resizingId, overlays]);
+  
   return (
     <div className="preview-panel fade-up">
       <div className="preview-viewport">
         {videoUrl ? (
-          <div className={`preview-frame ${format === 'instagram' ? 'fmt-instagram' : 'fmt-youtube'}`}>
-            <video
-              ref={videoRef}
-              src={videoUrl || undefined}
-              muted loop autoPlay playsInline
-              style={{ display: 'block', width: '100%', height: '100%' }}
-            />
-            <canvas
-              ref={canvasRef}
-              style={{
-                display: lutActive ? 'block' : 'none',
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                clipPath: `polygon(0 0, ${splitPos}% 0, ${splitPos}% 100%, 0 100%)`
-              }}
-            />
+          <div 
+            className={`preview-frame ${format === 'instagram' ? 'fmt-instagram' : 'fmt-youtube'}`}
+            onMouseMove={(e) => draggingId && handleDrag(draggingId, e)}
+            onMouseUp={() => setDraggingId(null)}
+            onTouchMove={(e) => draggingId && handleDrag(draggingId, e)}
+            onTouchEnd={() => setDraggingId(null)}
+            style={{ 
+              overflow: 'hidden',
+              transform: isStabilized ? 'scale(1.1)' : 'none', // Simple zoom to crop edges for stabilization look
+              transition: 'transform 0.3s ease'
+            }}
+          >
+            <div style={{ 
+              width: '100%', 
+              height: '100%',
+              animation: isStabilized ? 'soft-stabilize 2s infinite alternate ease-in-out' : 'none'
+            }}>
+              <video
+                ref={videoRef}
+                src={videoUrl || undefined}
+                loop autoPlay playsInline
+                style={{ display: 'block', width: '100%', height: '100%', objectFit }}
+              />
+              <canvas
+                ref={canvasRef}
+                style={{
+                  display: lutCount > 0 ? 'block' : 'none',
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit,
+                  clipPath: `polygon(0 0, ${splitPos}% 0, ${splitPos}% 100%, 0 100%)`
+                }}
+              />
+            </div>
 
             <div className="preview-badge" style={{ zIndex: 20 }}>
               <span className="preview-badge-dot" />
-              {lutActive ? 'LUT Applied' : 'Live'}
+              {lutCount > 0 ? `${lutCount} LUT${lutCount > 1 ? 's' : ''} Applied` : 'Live'}
             </div>
 
-            {lutActive && (
+            {/* Overlays Rendering */}
+            {overlays.filter((ov) => time >= ov.startTime && time <= ov.endTime).map((ov) => {
+              const isSelected = selectedOverlayId === ov.id;
+              return (
+                <div
+                  key={ov.id}
+                  id={`ov-${ov.id}`}
+                  onMouseDown={(e) => { e.stopPropagation(); setSelectedOverlayId(ov.id); setDraggingId(ov.id); }}
+                  onTouchStart={(e) => { e.stopPropagation(); setSelectedOverlayId(ov.id); setDraggingId(ov.id); }}
+                  style={{
+                    position: 'absolute',
+                    left: `${ov.x}%`,
+                    top: `${ov.y}%`,
+                    width: `${ov.width || 30}%`,
+                    height: `${ov.height || (ov.type === 'text' ? 10 : 30)}%`,
+                    transform: 'translate(-50%, -50%)',
+                    cursor: draggingId === ov.id ? 'grabbing' : 'grab',
+                    zIndex: 30,
+                    userSelect: 'none',
+                    border: isSelected ? '2px solid var(--accent)' : '2px solid transparent',
+                    borderRadius: '4px',
+                    pointerEvents: (draggingId && draggingId !== ov.id) || resizingId ? 'none' : 'auto',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {/* Selection Handles */}
+                  {isSelected && (
+                    <>
+                      <button 
+                        className="ov-handle ov-handle-tr" 
+                        onMouseDown={(e) => { e.stopPropagation(); setOverlays(overlays.filter(o => o.id !== ov.id)); setSelectedOverlayId(null); }}
+                      >
+                        <X style={{ width: 10, height: 10 }} />
+                      </button>
+                      <div 
+                        className="ov-handle ov-handle-br" 
+                        onMouseDown={(e) => { e.stopPropagation(); setResizingId(ov.id); }}
+                      />
+                      <button 
+                        className="ov-handle ov-handle-tl"
+                        onMouseDown={(e) => { 
+                          e.stopPropagation(); 
+                          const newText = prompt("Edit text:", ov.content);
+                          if (newText) setOverlays(overlays.map(o => o.id === ov.id ? { ...o, content: newText } : o));
+                        }}
+                      >
+                        <Type style={{ width: 10, height: 10 }} />
+                      </button>
+                    </>
+                  )}
+
+                  {ov.type === 'text' && (
+                    <span style={{
+                      color: 'white',
+                      fontWeight: 'bold',
+                      fontSize: format === 'youtube' ? '3vw' : '6vw',
+                      textShadow: '0px 0px 10px rgba(0,0,0,0.8)',
+                      whiteSpace: 'nowrap',
+                      display: 'block',
+                      width: '100%',
+                      height: '100%',
+                      padding: '10px'
+                    }}>
+                      {ov.content}
+                    </span>
+                  )}
+                  {ov.type === 'image' && (
+                    <img src={ov.content} alt="" style={{ width: '100%', height: '100%', pointerEvents: 'none', borderRadius: '4px', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }} />
+                  )}
+                  {ov.type === 'video' && (
+                    <video src={ov.content} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', pointerEvents: 'none', borderRadius: '4px', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }} />
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Subtitles Rendering */}
+            {currentSubtitle && (
+              <div style={{
+                position: 'absolute',
+                bottom: '15%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 40,
+                width: '80%',
+                display: 'flex',
+                justifyContent: 'center'
+              }}>
+                <div style={{
+                  background: 'rgba(0,0,0,0.7)',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  fontSize: format === 'youtube' ? '1.2rem' : '1rem',
+                  textAlign: 'center',
+                  backdropFilter: 'blur(4px)',
+                  boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+                }}>
+                  {currentSubtitle.text}
+                </div>
+              </div>
+            )}
+
+            {lutCount > 0 && (
               <>
                 <div className="split-line" style={{ left: `${splitPos}%` }} />
                 <input 
@@ -370,7 +605,7 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
           <div className="tl-track" onClick={seek} style={{ marginLeft: '1rem', flex: 1 }}>
             <div className="tl-fill" style={{ width: `${pct}%` }} />
           </div>
-          <span className="tl-time">{fmt(time)} / {fmt(dur)}</span>
+          <span className="tl-time">{fmt(relativeTime)} / {fmt(trimmedDuration)}</span>
         </div>
       )}
 
