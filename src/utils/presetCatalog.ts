@@ -41,6 +41,10 @@ function makeFallbackHue(seed: string) {
   return Array.from(seed).reduce((acc, char) => acc + char.charCodeAt(0), 0) % 360;
 }
 
+function naturalPresetSort(left: PresetCatalogItem, right: PresetCatalogItem) {
+  return left.fileName.localeCompare(right.fileName, undefined, { numeric: true, sensitivity: 'base' });
+}
+
 export function getPresetCatalog(): PresetCatalogItem[] {
   const imageLookup = new Map<string, string>();
 
@@ -61,7 +65,7 @@ export function getPresetCatalog(): PresetCatalogItem[] {
         fallbackHue: makeFallbackHue(baseName),
       };
     })
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .sort(naturalPresetSort);
 }
 
 export async function fetchPresetCatalog(baseUrl: string): Promise<PresetCatalogItem[]> {

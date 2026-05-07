@@ -2,9 +2,10 @@ import { useState, useCallback } from 'react';
 import VideoPreview from './components/VideoPreview';
 import EditorControls from './components/EditorControls';
 import { processVideo } from './utils/ffmpegUtils';
-import { Sparkles, Download } from 'lucide-react';
+import { Coffee, Download, Menu, Sparkles, X } from 'lucide-react';
 
 function App() {
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [lutFiles, setLutFiles] = useState<File[]>([]);
   const [format, setFormat] = useState<'youtube' | 'instagram'>('youtube');
@@ -18,12 +19,10 @@ function App() {
   const [speed, setSpeed] = useState<number>(1);
   const [isMuted, setIsMuted] = useState(false);
   const [bgMusicFile, setBgMusicFile] = useState<File | null>(null);
-  const [isStabilized, setIsStabilized] = useState(false);
   const [objectFit, setObjectFit] = useState<'cover' | 'contain'>('cover');
   const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
   const [overlays, setOverlays] = useState<any[]>([]);
   const [subtitles, setSubtitles] = useState<any[]>([]);
-  const [exportedBlob, setExportedBlob] = useState<Blob | null>(null);
 
   const handleVideoUpload = useCallback((file: File) => {
     setVideoFile(file);
@@ -47,6 +46,16 @@ function App() {
 
   const handleLutClear = useCallback(() => {
     setLutFiles([]);
+  }, []);
+
+  const handleVideoClear = useCallback(() => {
+    setVideoFile(null);
+    setLutFiles([]);
+    setDuration(0);
+    setStartTime(0);
+    setEndTime(10);
+    setOverlays([]);
+    setSubtitles([]);
   }, []);
 
   const handleTrimChange = useCallback((start: number, end: number) => {
@@ -120,14 +129,12 @@ function App() {
         isMuted,
         bgMusicFile,
         textOverlayDataUrl,
-        lutFiles,
-        isStabilized
+        lutFiles
       }, (p) => setProgress(p));
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `export-${format}-${Date.now()}.mp4`;
       a.click();
-      setExportedBlob(blob);
     } catch (err) {
       console.error('Export failed:', err);
       alert('Export failed. Check console for details.');
@@ -148,8 +155,6 @@ function App() {
     setBgMusicFile(null);
     setOverlays([]);
     setSubtitles([]);
-    setIsStabilized(false);
-    setExportedBlob(null);
   };
 
   return (
@@ -159,16 +164,28 @@ function App() {
           <div className="brand-icon">
             <Sparkles style={{ width: 14, height: 14 }} />
           </div>
-          <span className="brand-name">Cinemaster Pro</span>
-          <span className="brand-tag">Pro Edition</span>
+          <span className="brand-name" style={{ color: 'var(--accent)', fontSize: '1rem' }}>Cinemaster</span>
+          <span className="brand-tag">Beta Version</span>
         </div>
-        <div className="header-actions" style={{ display: 'flex', gap: '0.8rem', marginLeft: 'auto' }}>
-          <button className="btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }} onClick={() => window.open('#', '_blank')}>
-            ☕ Buy me a coffee
+        <button
+          className="header-menu-btn"
+          onClick={() => setIsHeaderMenuOpen((open) => !open)}
+          aria-expanded={isHeaderMenuOpen}
+          aria-label="Toggle header menu"
+        >
+          {isHeaderMenuOpen
+            ? <X style={{ width: 16, height: 16 }} />
+            : <Menu style={{ width: 16, height: 16 }} />}
+        </button>
+        <div className={`header-actions ${isHeaderMenuOpen ? 'open' : ''}`}>
+          <button className="header-action-btn coffee-btn" onClick={() => window.open('#', '_blank')}>
+            <Coffee style={{ width: 14, height: 14 }} />
+            Buy me a coffee
           </button>
-          <button className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }} onClick={() => window.open('#', '_blank')}>
+          <button className="header-action-btn desktop-btn" onClick={() => window.open('#', '_blank')}>
             <Download style={{ width: 14, height: 14 }} />
-            Desktop Version - $14.99
+            <span>Get Desktop App</span>
+            <small>Coming soon</small>
           </button>
         </div>
       </header>
@@ -186,7 +203,6 @@ function App() {
           overlays={overlays}
           setOverlays={setOverlays}
           subtitles={subtitles}
-          isStabilized={isStabilized}
           objectFit={objectFit}
           selectedOverlayId={selectedOverlayId}
           setSelectedOverlayId={setSelectedOverlayId}
@@ -196,6 +212,7 @@ function App() {
           videoFile={videoFile}
           lutFiles={lutFiles}
           onVideoUpload={handleVideoUpload}
+          onVideoClear={handleVideoClear}
           onLutToggle={handleLutToggle}
           onLutClear={handleLutClear}
           format={format}
@@ -218,11 +235,8 @@ function App() {
           setOverlays={setOverlays}
           subtitles={subtitles}
           onSubtitleUpload={handleSubtitleUpload}
-          isStabilized={isStabilized}
-          setIsStabilized={setIsStabilized}
           objectFit={objectFit}
           setObjectFit={setObjectFit}
-          exportedBlob={exportedBlob}
         />
       </main>
 

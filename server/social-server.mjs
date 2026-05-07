@@ -484,17 +484,30 @@ async function listPresets() {
   const entries = await fs.readdir(presetsDir, { withFileTypes: true });
   const imageExts = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif']);
   const imagesByBase = new Map();
+  const cubeEntries = [];
 
   for (const entry of entries) {
     if (!entry.isFile()) continue;
     const ext = path.extname(entry.name).toLowerCase();
-    if (!imageExts.has(ext)) continue;
-    imagesByBase.set(path.basename(entry.name, ext).toLowerCase(), `/presets/${entry.name}`);
+
+    if (imageExts.has(ext)) {
+      imagesByBase.set(path.basename(entry.name, ext).toLowerCase(), `/presets/${entry.name}`);
+      continue;
+    }
+
+    if (ext === '.cube') {
+      const fullPath = path.join(presetsDir, entry.name);
+      const stats = await fs.stat(fullPath);
+      cubeEntries.push({ entry, createdAt: stats.birthtimeMs || stats.ctimeMs || stats.mtimeMs });
+    }
   }
 
-  return entries
-    .filter((entry) => entry.isFile() && path.extname(entry.name).toLowerCase() === '.cube')
-    .map((entry) => {
+  return cubeEntries
+    .sort((left, right) => (
+      left.createdAt - right.createdAt ||
+      left.entry.name.localeCompare(right.entry.name, undefined, { numeric: true, sensitivity: 'base' })
+    ))
+    .map(({ entry }) => {
       const baseName = path.basename(entry.name, '.cube');
       const normalized = baseName.toLowerCase();
       return {
@@ -505,8 +518,7 @@ async function listPresets() {
         imagePath: imagesByBase.get(normalized),
         fallbackHue: makeFallbackHue(normalized),
       };
-    })
-    .sort((left, right) => left.name.localeCompare(right.name));
+    });
 }
 
 function humanizePresetName(baseName) {

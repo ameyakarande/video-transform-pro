@@ -29,7 +29,6 @@ export interface ProcessOptions {
   lutFiles?: File[];
   overlays?: any[];
   subtitles?: any[];
-  isStabilized?: boolean;
 }
 
 export async function processVideo(
@@ -41,7 +40,7 @@ export async function processVideo(
   const { 
     startTime, endTime, format, 
     speed = 1, isMuted = false, 
-    bgMusicFile, textOverlayDataUrl, isStabilized,
+    bgMusicFile, textOverlayDataUrl,
     lutFiles = [],
     overlays = [],
   } = options;
@@ -87,10 +86,6 @@ export async function processVideo(
     videoFilters.push('crop=ih*9/16:ih', 'scale=720:1280');
   } else {
     videoFilters.push('scale=1920:1080:force_original_aspect_ratio=decrease', 'pad=1920:1080:(ow-iw)/2:(oh-ih)/2');
-  }
-
-  if (isStabilized) {
-    videoFilters.push('deshake');
   }
 
   if (speed !== 1) {

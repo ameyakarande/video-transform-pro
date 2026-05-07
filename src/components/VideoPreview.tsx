@@ -31,7 +31,6 @@ interface VideoPreviewProps {
   overlays: OverlayItem[];
   setOverlays: React.Dispatch<React.SetStateAction<OverlayItem[]>>;
   subtitles: SubtitleItem[];
-  isStabilized: boolean;
   objectFit: 'cover' | 'contain';
   selectedOverlayId: string | null;
   setSelectedOverlayId: (id: string | null) => void;
@@ -193,6 +192,10 @@ function createLutRenderer(canvas: HTMLCanvasElement) {
 }
 
 type LutRendererType = ReturnType<typeof createLutRenderer>;
+type VideoFrameElement = HTMLVideoElement & {
+  requestVideoFrameCallback?: (callback: () => void) => number;
+  cancelVideoFrameCallback?: (handle: number) => void;
+};
 
 function fmt(s: number) {
   const m = Math.floor(s / 60);
@@ -201,13 +204,14 @@ function fmt(s: number) {
 
 const VideoPreview: React.FC<VideoPreviewProps> = ({
   videoFile, startTime, endTime, format, lutFiles, onDurationLoaded,
-  speed, isMuted, overlays, setOverlays, subtitles, isStabilized,
+  speed, isMuted, overlays, setOverlays, subtitles,
   objectFit, selectedOverlayId, setSelectedOverlayId
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<LutRendererType>(null);
   const rafRef = useRef(0);
+  const videoFrameRef = useRef<number | null>(null);
   const aliveRef = useRef(true);
 
   const [videoUrl, setVideoUrl] = useState('');
@@ -224,6 +228,10 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
     return () => {
       aliveRef.current = false;
       cancelAnimationFrame(rafRef.current);
+      const v = videoRef.current as VideoFrameElement | null;
+      if (videoFrameRef.current !== null && v?.cancelVideoFrameCallback) {
+        v.cancelVideoFrameCallback(videoFrameRef.current);
+      }
       rendererRef.current?.dispose();
       rendererRef.current = null;
     };
@@ -232,6 +240,11 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
   // Video URL
   useEffect(() => {
     cancelAnimationFrame(rafRef.current);
+    const v = videoRef.current as VideoFrameElement | null;
+    if (videoFrameRef.current !== null && v?.cancelVideoFrameCallback) {
+      v.cancelVideoFrameCallback(videoFrameRef.current);
+      videoFrameRef.current = null;
+    }
     rendererRef.current?.dispose();
     rendererRef.current = null;
     setLutCount(0);
@@ -301,29 +314,61 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
       if (rendererRef.current) {
         rendererRef.current.setLuts(parsed);
         setLutCount(parsed.filter(Boolean).length);
+        if (videoRef.current?.readyState && videoRef.current.readyState >= 2) {
+          rendererRef.current.render(videoRef.current);
+        }
       }
     };
     loadAll();
   }, [lutFiles]);
 
-  // Render loop — only when LUT is active and not showing original
-  const tick = useCallback(() => {
+  const cancelLutPreviewLoop = useCallback(() => {
+    cancelAnimationFrame(rafRef.current);
+    const v = videoRef.current as VideoFrameElement | null;
+    if (videoFrameRef.current !== null && v?.cancelVideoFrameCallback) {
+      v.cancelVideoFrameCallback(videoFrameRef.current);
+      videoFrameRef.current = null;
+    }
+  }, []);
+
+  const renderLutFrame = useCallback(() => {
     if (!aliveRef.current) return;
     const v = videoRef.current;
     const r = rendererRef.current;
-    if (v && r && !v.paused && v.readyState >= 2) {
+    if (v && r && v.readyState >= 2) {
       r.render(v);
     }
-    rafRef.current = requestAnimationFrame(tick);
   }, []);
 
-  useEffect(() => {
-    cancelAnimationFrame(rafRef.current);
-    if (lutCount > 0) {
-      rafRef.current = requestAnimationFrame(tick);
+  const scheduleLutPreviewFrame = useCallback(() => {
+    if (!aliveRef.current) return;
+    const v = videoRef.current as VideoFrameElement | null;
+    if (!v || v.paused || lutCount === 0) return;
+
+    if (v.requestVideoFrameCallback) {
+      videoFrameRef.current = v.requestVideoFrameCallback(() => {
+        videoFrameRef.current = null;
+        renderLutFrame();
+        scheduleLutPreviewFrame();
+      });
+      return;
     }
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [lutCount, tick]);
+
+    rafRef.current = requestAnimationFrame(() => {
+      renderLutFrame();
+      scheduleLutPreviewFrame();
+    });
+  }, [lutCount, renderLutFrame]);
+
+  useEffect(() => {
+    cancelLutPreviewLoop();
+    if (lutCount > 0 && playing) {
+      scheduleLutPreviewFrame();
+    } else if (lutCount > 0) {
+      renderLutFrame();
+    }
+    return cancelLutPreviewLoop;
+  }, [lutCount, playing, cancelLutPreviewLoop, renderLutFrame, scheduleLutPreviewFrame]);
 
   // Apply speed and mute when they change
   useEffect(() => {
@@ -423,20 +468,17 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
             onTouchMove={(e) => draggingId && handleDrag(draggingId, e)}
             onTouchEnd={() => setDraggingId(null)}
             style={{ 
-              overflow: 'hidden',
-              transform: isStabilized ? 'scale(1.1)' : 'none', // Simple zoom to crop edges for stabilization look
-              transition: 'transform 0.3s ease'
+              overflow: 'hidden'
             }}
           >
             <div style={{ 
               width: '100%', 
-              height: '100%',
-              animation: isStabilized ? 'soft-stabilize 2s infinite alternate ease-in-out' : 'none'
+              height: '100%'
             }}>
               <video
                 ref={videoRef}
                 src={videoUrl || undefined}
-                loop autoPlay playsInline
+                loop playsInline preload="metadata"
                 style={{ display: 'block', width: '100%', height: '100%', objectFit }}
               />
               <canvas
