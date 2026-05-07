@@ -25,6 +25,7 @@ interface VideoPreviewProps {
   endTime: number;
   format: 'youtube' | 'instagram';
   lutFiles: File[];
+  onVideoUpload: (file: File) => void;
   onDurationLoaded?: (duration: number) => void;
   speed: number;
   isMuted: boolean;
@@ -203,7 +204,7 @@ function fmt(s: number) {
 }
 
 const VideoPreview: React.FC<VideoPreviewProps> = ({
-  videoFile, startTime, endTime, format, lutFiles, onDurationLoaded,
+  videoFile, startTime, endTime, format, lutFiles, onVideoUpload, onDurationLoaded,
   speed, isMuted, overlays, setOverlays, subtitles,
   objectFit, selectedOverlayId, setSelectedOverlayId
 }) => {
@@ -415,6 +416,14 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
     setOverlays(overlays.map(ov => ov.id === draggingId ? { ...ov, x, y } : ov));
   };
 
+  const handlePlaceholderUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onVideoUpload(file);
+      e.target.value = '';
+    }
+  };
+
   useEffect(() => {
     const handleWindowMouseMove = (e: MouseEvent) => {
       if (resizingId) {
@@ -620,11 +629,12 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
             )}
           </div>
         ) : (
-          <div className="preview-placeholder">
+          <label className="preview-placeholder">
             <Film style={{ width: 40, height: 40, opacity: 0.25 }} />
             <p>Drop a video or click upload</p>
             <span>MP4 · MOV · WebM</span>
-          </div>
+            <input type="file" accept="video/*" hidden onChange={handlePlaceholderUpload} />
+          </label>
         )}
       </div>
 

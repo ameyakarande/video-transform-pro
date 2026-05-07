@@ -197,6 +197,7 @@ function App() {
           endTime={endTime}
           format={format}
           lutFiles={lutFiles}
+          onVideoUpload={handleVideoUpload}
           onDurationLoaded={handleDurationLoaded}
           speed={speed}
           isMuted={isMuted}
