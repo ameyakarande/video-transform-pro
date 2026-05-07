@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" role="img" aria-labelledby="title">
+  <title id="title">Export video walkthrough</title>
+  <rect width="900" height="520" rx="28" fill="#080808"/>
+  <rect x="120" y="88" width="660" height="270" rx="20" fill="#111" stroke="#292929"/>
+  <circle cx="450" cy="224" r="86" fill="#f5f0c8" opacity=".16"/>
+  <path d="M450 158v116M405 230l45 45 45-45" stroke="#f5f0c8" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="325" y="382" width="250" height="58" rx="29" fill="#f5f0c8"/>
+  <text x="450" y="419" text-anchor="middle" fill="#090909" font-family="Inter, Arial" font-size="20" font-weight="900">Export Video</text>
+  <text x="450" y="470" text-anchor="middle" fill="#777" font-family="Inter, Arial" font-size="18">Rendered locally in your browser</text>
+</svg>

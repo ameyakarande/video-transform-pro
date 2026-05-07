@@ -1,11 +1,15 @@
-import { useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import VideoPreview from './components/VideoPreview';
 import EditorControls from './components/EditorControls';
+import HowItWorks from './components/HowItWorks';
 import { processVideo } from './utils/ffmpegUtils';
-import { Coffee, Download, Menu, Sparkles, X } from 'lucide-react';
+import { BookOpen, Coffee, Download, Menu, Sparkles, X } from 'lucide-react';
 
 function App() {
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
+  const [page, setPage] = useState<'editor' | 'how'>(
+    window.location.hash === '#how-it-works' ? 'how' : 'editor'
+  );
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [lutFiles, setLutFiles] = useState<File[]>([]);
   const [format, setFormat] = useState<'youtube' | 'instagram'>('youtube');
@@ -23,6 +27,28 @@ function App() {
   const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
   const [overlays, setOverlays] = useState<any[]>([]);
   const [subtitles, setSubtitles] = useState<any[]>([]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setPage(window.location.hash === '#how-it-works' ? 'how' : 'editor');
+      setIsHeaderMenuOpen(false);
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const goToEditor = useCallback(() => {
+    window.location.hash = '';
+    setPage('editor');
+    setIsHeaderMenuOpen(false);
+  }, []);
+
+  const goToHowItWorks = useCallback(() => {
+    window.location.hash = 'how-it-works';
+    setPage('how');
+    setIsHeaderMenuOpen(false);
+  }, []);
 
   const handleVideoUpload = useCallback((file: File) => {
     setVideoFile(file);
@@ -178,6 +204,10 @@ function App() {
             : <Menu style={{ width: 16, height: 16 }} />}
         </button>
         <div className={`header-actions ${isHeaderMenuOpen ? 'open' : ''}`}>
+          <button className="header-action-btn info-btn" onClick={goToHowItWorks}>
+            <BookOpen style={{ width: 14, height: 14 }} />
+            How it works
+          </button>
           <button className="header-action-btn coffee-btn" onClick={() => window.open('#', '_blank')}>
             <Coffee style={{ width: 14, height: 14 }} />
             Buy me a coffee
@@ -190,56 +220,60 @@ function App() {
         </div>
       </header>
 
-      <main className="app-main">
-        <VideoPreview
-          videoFile={videoFile}
-          startTime={startTime}
-          endTime={endTime}
-          format={format}
-          lutFiles={lutFiles}
-          onVideoUpload={handleVideoUpload}
-          onDurationLoaded={handleDurationLoaded}
-          speed={speed}
-          isMuted={isMuted}
-          overlays={overlays}
-          setOverlays={setOverlays}
-          subtitles={subtitles}
-          objectFit={objectFit}
-          selectedOverlayId={selectedOverlayId}
-          setSelectedOverlayId={setSelectedOverlayId}
-        />
+      {page === 'how' ? (
+        <HowItWorks onBack={goToEditor} />
+      ) : (
+        <main className="app-main">
+          <VideoPreview
+            videoFile={videoFile}
+            startTime={startTime}
+            endTime={endTime}
+            format={format}
+            lutFiles={lutFiles}
+            onVideoUpload={handleVideoUpload}
+            onDurationLoaded={handleDurationLoaded}
+            speed={speed}
+            isMuted={isMuted}
+            overlays={overlays}
+            setOverlays={setOverlays}
+            subtitles={subtitles}
+            objectFit={objectFit}
+            selectedOverlayId={selectedOverlayId}
+            setSelectedOverlayId={setSelectedOverlayId}
+          />
 
-        <EditorControls
-          videoFile={videoFile}
-          lutFiles={lutFiles}
-          onVideoUpload={handleVideoUpload}
-          onVideoClear={handleVideoClear}
-          onLutToggle={handleLutToggle}
-          onLutClear={handleLutClear}
-          format={format}
-          setFormat={setFormat}
-          startTime={startTime}
-          endTime={endTime}
-          duration={duration}
-          onTrimChange={handleTrimChange}
-          onDownload={handleDownload}
-          onClear={handleClear}
-          isProcessing={isProcessing}
-          progress={progress}
-          speed={speed}
-          setSpeed={setSpeed}
-          isMuted={isMuted}
-          setIsMuted={setIsMuted}
-          bgMusicFile={bgMusicFile}
-          setBgMusicFile={setBgMusicFile}
-          overlays={overlays}
-          setOverlays={setOverlays}
-          subtitles={subtitles}
-          onSubtitleUpload={handleSubtitleUpload}
-          objectFit={objectFit}
-          setObjectFit={setObjectFit}
-        />
-      </main>
+          <EditorControls
+            videoFile={videoFile}
+            lutFiles={lutFiles}
+            onVideoUpload={handleVideoUpload}
+            onVideoClear={handleVideoClear}
+            onLutToggle={handleLutToggle}
+            onLutClear={handleLutClear}
+            format={format}
+            setFormat={setFormat}
+            startTime={startTime}
+            endTime={endTime}
+            duration={duration}
+            onTrimChange={handleTrimChange}
+            onDownload={handleDownload}
+            onClear={handleClear}
+            isProcessing={isProcessing}
+            progress={progress}
+            speed={speed}
+            setSpeed={setSpeed}
+            isMuted={isMuted}
+            setIsMuted={setIsMuted}
+            bgMusicFile={bgMusicFile}
+            setBgMusicFile={setBgMusicFile}
+            overlays={overlays}
+            setOverlays={setOverlays}
+            subtitles={subtitles}
+            onSubtitleUpload={handleSubtitleUpload}
+            objectFit={objectFit}
+            setObjectFit={setObjectFit}
+          />
+        </main>
+      )}
 
       <footer className="app-footer">
         Powered by FFmpeg.wasm & WebGL2 · All processing happens locally in your browser

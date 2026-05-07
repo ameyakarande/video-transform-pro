@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" role="img" aria-labelledby="title">
+  <title id="title">Trim clip walkthrough</title>
+  <rect width="900" height="520" rx="28" fill="#080808"/>
+  <rect x="80" y="78" width="740" height="260" rx="18" fill="#111"/>
+  <rect x="110" y="108" width="680" height="200" rx="10" fill="#161616"/>
+  <path d="M388 174l88 44-88 44z" fill="#f5f0c8"/>
+  <rect x="95" y="385" width="710" height="56" rx="14" fill="#111" stroke="#303030"/>
+  <rect x="170" y="385" width="446" height="56" fill="#f5f0c8" opacity=".18"/>
+  <rect x="166" y="377" width="10" height="72" rx="4" fill="#f5f0c8"/>
+  <rect x="612" y="377" width="10" height="72" rx="4" fill="#f5f0c8"/>
+  <path d="M110 413h680" stroke="#343434" stroke-width="8" stroke-linecap="round"/>
+  <path d="M170 413h446" stroke="#f5f0c8" stroke-width="8" stroke-linecap="round"/>
+  <text x="450" y="472" text-anchor="middle" fill="#f5f0c8" font-family="Inter, Arial" font-size="24" font-weight="800">Drag handles to set start and end</text>
+</svg>

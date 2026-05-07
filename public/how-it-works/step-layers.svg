@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" role="img" aria-labelledby="title">
+  <title id="title">Add finishing layers walkthrough</title>
+  <rect width="900" height="520" rx="28" fill="#080808"/>
+  <rect x="80" y="70" width="520" height="320" rx="18" fill="#111"/>
+  <rect x="115" y="105" width="450" height="250" rx="12" fill="#181818"/>
+  <rect x="162" y="140" width="210" height="54" rx="10" fill="#f5f0c8"/>
+  <text x="267" y="175" text-anchor="middle" fill="#090909" font-family="Inter, Arial" font-size="22" font-weight="900">TITLE TEXT</text>
+  <rect x="380" y="218" width="126" height="82" rx="12" fill="#395a73"/>
+  <circle cx="420" cy="250" r="18" fill="#f5f0c8"/>
+  <path d="M390 288l48-44 58 44z" fill="#a6c4d3"/>
+  <rect x="646" y="112" width="170" height="48" rx="14" fill="#111" stroke="#303030"/>
+  <text x="731" y="142" text-anchor="middle" fill="#f5f0c8" font-family="Inter, Arial" font-size="16" font-weight="800">Music</text>
+  <rect x="646" y="184" width="170" height="48" rx="14" fill="#111" stroke="#303030"/>
+  <text x="731" y="214" text-anchor="middle" fill="#f5f0c8" font-family="Inter, Arial" font-size="16" font-weight="800">Subtitles</text>
+  <rect x="646" y="256" width="170" height="48" rx="14" fill="#111" stroke="#303030"/>
+  <text x="731" y="286" text-anchor="middle" fill="#f5f0c8" font-family="Inter, Arial" font-size="16" font-weight="800">Overlays</text>
+  <text x="450" y="450" text-anchor="middle" fill="#f5f0c8" font-family="Inter, Arial" font-size="28" font-weight="800">Layer text, media, subtitles, and audio</text>
+</svg>

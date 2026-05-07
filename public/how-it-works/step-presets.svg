@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" role="img" aria-labelledby="title">
+  <title id="title">Apply LUT preset walkthrough</title>
+  <rect width="900" height="520" rx="28" fill="#080808"/>
+  <rect x="55" y="72" width="485" height="274" rx="18" fill="#111"/>
+  <linearGradient id="g" x1="0" x2="1">
+    <stop offset="0" stop-color="#2d4665"/>
+    <stop offset=".5" stop-color="#6b5140"/>
+    <stop offset="1" stop-color="#d8a86c"/>
+  </linearGradient>
+  <rect x="80" y="98" width="435" height="222" rx="12" fill="url(#g)"/>
+  <rect x="590" y="72" width="110" height="78" rx="12" fill="#3d536c"/>
+  <rect x="720" y="72" width="110" height="78" rx="12" fill="#6f473e"/>
+  <rect x="590" y="170" width="110" height="78" rx="12" fill="#334f3f" stroke="#f5f0c8" stroke-width="4"/>
+  <rect x="720" y="170" width="110" height="78" rx="12" fill="#765b84"/>
+  <rect x="590" y="268" width="110" height="78" rx="12" fill="#7c6f4c"/>
+  <rect x="720" y="268" width="110" height="78" rx="12" fill="#334b68"/>
+  <text x="645" y="220" text-anchor="middle" fill="#fff" font-family="Inter, Arial" font-size="14" font-weight="800">Selected</text>
+  <text x="450" y="432" text-anchor="middle" fill="#f5f0c8" font-family="Inter, Arial" font-size="28" font-weight="800">Choose a LUT thumbnail</text>
+</svg>
