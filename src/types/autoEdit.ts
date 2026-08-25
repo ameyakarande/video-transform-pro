@@ -30,4 +30,5 @@ export interface AutoEditBrief {
   style: 'cinematic' | 'energetic' | 'documentary' | 'social';
   targetDuration: number;
   format: OutputFormat;
+  objectFit: 'cover' | 'contain';
 }

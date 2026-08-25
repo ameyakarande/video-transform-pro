@@ -1353,9 +1353,11 @@ body {
 
 /* Auto Edit uses the same canvas + right controls structure as the manual editor */
 .auto-classic { display: grid; grid-template-columns: minmax(0, 1fr) 405px; overflow: hidden; }
-.auto-classic-stage { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 20px; overflow: hidden; background-color: #080808; background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px); background-size: 68px 68px; }
+.auto-classic-stage { min-width: 0; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px; overflow: hidden; background-color: #080808; background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px); background-size: 68px 68px; }
 .auto-classic-canvas { min-height: 0; flex: 1; position: relative; display: grid; place-items: center; overflow: hidden; background: #020202; border: 1px dashed #343434; border-radius: 16px; }
 .auto-classic-canvas video { width: 100%; height: 100%; display: block; object-fit: contain; }
+.auto-classic-canvas.landscape-output { width: 100%; }
+.auto-classic-canvas.portrait-output { width: min(100%, 520px); border-style: solid; }
 .auto-classic-canvas:fullscreen { width: 100vw; height: 100vh; border: 0; border-radius: 0; }
 .auto-classic-empty { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--text-secondary); cursor: pointer; }
 .auto-classic-empty:hover { color: var(--accent); background: rgba(255,255,255,.015); }
@@ -1416,6 +1418,9 @@ body {
 .auto-control-actions .auto-export { color: #111; background: var(--accent); border: 0; }
 .auto-control-actions .auto-back { color: var(--text-secondary); background: #090909; border: 1px solid var(--border); }
 .auto-control-actions svg { width: 14px; }
+.auto-generation-time { display: flex; align-items: center; gap: 6px; padding: 8px; color: var(--text-secondary); background: rgba(139,92,246,.08); border: 1px solid rgba(139,92,246,.24); border-radius: 7px; font-size: .51rem; }
+.auto-generation-time svg { width: 12px; color: #8de2a6; }
+.auto-generation-time strong { color: var(--text); }
 @media (max-width: 900px) { .auto-classic { display: flex; flex-direction: column; overflow-y: auto; } .auto-classic-stage { min-height: 620px; padding: 10px; } .auto-classic-controls { overflow: visible; border-left: 0; } .auto-control-actions { position: static; width: auto; } }
 
 /* Canva-like media selection handles */

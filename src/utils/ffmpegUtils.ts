@@ -217,39 +217,53 @@ export async function processAutoEditSequence(
   format: OutputFormat,
   onProgress?: (progress: number) => void,
   preview = false,
+  objectFit: ObjectFitMode = 'contain',
 ) {
   if (!shots.length) throw new Error('Add at least one shot to the first cut.');
   const instance = await loadFFmpeg();
   const runId = Date.now().toString(36);
   const output = outputSize(format);
-  const width = preview ? (format === 'youtube' ? 960 : 540) : output.width;
-  const height = preview ? (format === 'youtube' ? 540 : 960) : output.height;
+  const width = preview ? (format === 'youtube' ? 1280 : 720) : output.width;
+  const height = preview ? (format === 'youtube' ? 720 : 1280) : output.height;
   const createdFiles: string[] = [];
   const segments: string[] = [];
   const clipMap = new Map(clips.map((clip) => [clip.id, clip]));
-  const progressHandler = ({ progress }: { progress: number }) => onProgress?.(Math.max(0, Math.min(.98, progress)));
+  let renderStage = 0;
+  let reportedProgress = 0;
+  const report = (value: number) => {
+    reportedProgress = Math.max(reportedProgress, Math.max(0, Math.min(1, value)));
+    onProgress?.(reportedProgress);
+  };
+  const progressHandler = ({ progress }: { progress: number }) => {
+    const stageProgress = Math.max(0, Math.min(1, progress));
+    report((renderStage + stageProgress * .9) / (shots.length + 1));
+  };
   instance.on('progress', progressHandler);
   try {
     for (let index = 0; index < shots.length; index += 1) {
+      renderStage = index;
       const shot = shots[index]; const clip = clipMap.get(shot.clipId);
       if (!clip) continue;
       const inputName = `auto-input-${runId}-${index}.${clip.file.name.split('.').pop() || 'mp4'}`;
       const segmentName = `auto-segment-${runId}-${index}.mp4`;
       createdFiles.push(inputName, segmentName); segments.push(segmentName);
       await instance.writeFile(inputName, await fetchFile(clip.file));
-      const scale = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1`;
-      const exitCode = await instance.exec(['-ss', String(shot.start), '-t', String(Math.max(.2, shot.end - shot.start)), '-i', inputName, '-vf', scale, '-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', preview ? '30' : '23', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-movflags', '+faststart', segmentName]);
+      const scale = objectFit === 'cover'
+        ? `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1`
+        : `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1`;
+      const exitCode = await instance.exec(['-ss', String(shot.start), '-t', String(Math.max(.2, shot.end - shot.start)), '-i', inputName, '-vf', scale, '-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', preview ? '20' : '23', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-movflags', '+faststart', segmentName]);
       if (exitCode !== 0) throw new Error(`Could not render shot ${index + 1}.`);
-      onProgress?.((index + .7) / (shots.length + 1));
+      report((index + 1) / (shots.length + 1));
     }
     if (!segments.length) throw new Error('The first cut contains no usable shots.');
     const listName = `auto-list-${runId}.txt`; const outputName = `auto-output-${runId}.mp4`;
     createdFiles.push(listName, outputName);
     await instance.writeFile(listName, new TextEncoder().encode(segments.map((name) => `file '${name}'`).join('\n')));
+    renderStage = shots.length;
     let exitCode = await instance.exec(['-f', 'concat', '-safe', '0', '-i', listName, '-c', 'copy', '-movflags', '+faststart', outputName]);
     if (exitCode !== 0) exitCode = await instance.exec(['-f', 'concat', '-safe', '0', '-i', listName, '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-movflags', '+faststart', outputName]);
     if (exitCode !== 0) throw new Error('Could not assemble the first cut.');
-    const data = await instance.readFile(outputName); onProgress?.(1);
+    const data = await instance.readFile(outputName); report(1);
     return new Blob([new Uint8Array(data as Uint8Array)], { type: 'video/mp4' });
   } finally {
     instance.off('progress', progressHandler);
