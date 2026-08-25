@@ -266,6 +266,8 @@ function App() {
             setObjectFit={setObjectFit}
             exportedVideo={exportedVideo}
             exportFileName={`export-${format}.mp4`}
+            selectedOverlayId={selectedOverlayId}
+            setSelectedOverlayId={setSelectedOverlayId}
           />
         </main>
       )}

@@ -11,7 +11,11 @@ import {
   Type,
   Music,
   VolumeX,
-  FastForward
+  FastForward,
+  Image as ImageIcon,
+  Video as VideoIcon,
+  Search,
+  Plus
 } from 'lucide-react';
 import FilmstripTrim from './FilmstripTrim';
 import { fetchPresetCatalog, getPresetCatalog, type PresetCatalogItem } from '../utils/presetCatalog';
@@ -51,6 +55,8 @@ interface EditorControlsProps {
   setObjectFit: (o: ObjectFitMode) => void;
   exportedVideo: Blob | null;
   exportFileName: string;
+  selectedOverlayId: string | null;
+  setSelectedOverlayId: (id: string | null) => void;
 }
 
 const EditorControls: React.FC<EditorControlsProps> = ({
@@ -83,12 +89,43 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   objectFit,
   setObjectFit,
   exportedVideo,
-  exportFileName
+  exportFileName,
+  selectedOverlayId,
+  setSelectedOverlayId
 }) => {
   const [importTab, setImportTab] = useState<'custom' | 'presets'>('custom');
   const [presetsList, setPresetsList] = useState<PresetCatalogItem[]>([]);
   const [visibleCount, setVisibleCount] = useState(10);
   const [presetMode, setPresetMode] = useState<'single' | 'multi'>('single');
+  const [elementsOpen, setElementsOpen] = useState(false);
+  const [elementSearch, setElementSearch] = useState('');
+
+  const addTextOverlay = (preset: 'heading' | 'subheading' | 'body') => {
+    const settings = {
+      heading: { content: 'Add a heading', fontSize: 72, width: 52, height: 14, fontWeight: 'bold' as const },
+      subheading: { content: 'Add a subheading', fontSize: 48, width: 44, height: 11, fontWeight: 'bold' as const },
+      body: { content: 'Add a little bit of body text', fontSize: 30, width: 40, height: 9, fontWeight: 'normal' as const },
+    }[preset];
+    const id = crypto.randomUUID();
+    setOverlays((items) => [...items, {
+      id, type: 'text', x: 50, y: 50,
+      startTime, endTime, color: '#ffffff', fontFamily: 'Inter',
+      textAlign: 'center', opacity: 1, rotation: 0, borderRadius: 0,
+      ...settings,
+    }]);
+    setSelectedOverlayId(id);
+  };
+
+  const addMediaOverlay = (file: File, type: 'image' | 'video') => {
+    const content = URL.createObjectURL(file);
+    const id = crypto.randomUUID();
+    setOverlays((items) => [...items, {
+      id, type, content, file, x: 50, y: 50,
+      width: 34, height: 34, startTime, endTime,
+      opacity: 1, rotation: 0, borderRadius: 0,
+    }]);
+    setSelectedOverlayId(id);
+  };
 
   // Poll the local preset API so dropped files appear without a rebuild.
   useEffect(() => {
@@ -311,97 +348,65 @@ const EditorControls: React.FC<EditorControlsProps> = ({
         </div>
       )}
 
-      {/* Text & Asset Overlays */}
+      {/* Canva-style Elements */}
       {videoFile && (
-        <div className="ctrl-section">
-          <div className="ctrl-label">
-            <Type style={{ width: 10, height: 10, display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
-            Overlays & Assets
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <button 
-              className="btn-add-overlay"
-              style={{ fontSize: '0.7rem', padding: '6px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: '4px', color: 'white', cursor: 'pointer' }}
-              onClick={() => {
-                const text = prompt("Enter text for overlay:");
-                if (text) {
-                  setOverlays([...overlays, {
-                    id: Date.now().toString(),
-                    type: 'text',
-                    content: text,
-                    x: 50,
-                    y: 50,
-                    width: 30,
-                    height: 10,
-                    startTime: 0,
-                    endTime: duration || 10
-                  }]);
-                }
-              }}
-            >
-              + Add Text Overlay
-            </button>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <label className="btn-add-overlay" style={{ flex: 1, fontSize: '0.65rem', padding: '6px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: '4px', color: 'white', cursor: 'pointer', textAlign: 'center' }}>
-                + Image
-                <input type="file" accept="image/*" hidden onChange={(e) => {
-                  if (e.target.files?.[0]) {
-                    const reader = new FileReader();
-                    const file = e.target.files[0];
-                    reader.onload = (re) => {
-                      setOverlays([...overlays, {
-                        id: Date.now().toString(),
-                        type: 'image',
-                        content: String(re.target?.result || ''),
-                        file,
-                        x: 50,
-                        y: 50,
-                        width: 30,
-                        height: 30,
-                        startTime: 0,
-                        endTime: duration || 10
-                      }]);
-                    };
-                    reader.readAsDataURL(file);
-                  }
-                }} />
+        <div className="ctrl-section elements-section">
+          <button className="elements-launch" onClick={() => setElementsOpen((open) => !open)}>
+            <span className="elements-launch-icon"><Plus /></span>
+            <span><strong>Elements</strong><small>Add text, images and video</small></span>
+            <span className="elements-launch-arrow">{elementsOpen ? '−' : '+'}</span>
+          </button>
+
+          {elementsOpen && (
+            <div className="elements-panel">
+              <label className="elements-search">
+                <Search />
+                <input value={elementSearch} onChange={(event) => setElementSearch(event.target.value)} placeholder="Search elements" />
               </label>
-              <label className="btn-add-overlay" style={{ flex: 1, fontSize: '0.65rem', padding: '6px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: '4px', color: 'white', cursor: 'pointer', textAlign: 'center' }}>
-                + Video
-                <input type="file" accept="video/*" hidden onChange={(e) => {
-                  if (e.target.files?.[0]) {
-                    const file = e.target.files[0];
-                    const url = URL.createObjectURL(file);
-                    setOverlays([...overlays, {
-                      id: Date.now().toString(),
-                      type: 'video',
-                      content: url,
-                      file,
-                      x: 50,
-                      y: 50,
-                      width: 30,
-                      height: 30,
-                      startTime: 0,
-                      endTime: duration || 10
-                    }]);
-                  }
-                }} />
-              </label>
-            </div>
-          </div>
-          {overlays.length > 0 && (
-            <div className="overlay-list" style={{ marginTop: '10px' }}>
-              <div style={{ fontSize: '0.6rem', color: 'var(--text-dim)', marginBottom: '5px' }}>Active Overlays:</div>
-              {overlays.map((ov, idx) => (
-                <div key={idx} className="overlay-item" style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.65rem', padding: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', marginBottom: '4px' }}>
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {ov.type === 'text' ? ov.content : `[${ov.type}] ${ov.id}`}
-                  </span>
-                  <button onClick={() => setOverlays(overlays.filter(o => o.id !== ov.id))} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer' }}>
-                    <X style={{ width: 10, height: 10 }} />
-                  </button>
+
+              {(!elementSearch || 'text heading subheading body'.includes(elementSearch.toLowerCase())) && (
+                <div className="elements-group">
+                  <div className="elements-group-title"><Type /> Text</div>
+                  <button className="text-preset heading" onClick={() => addTextOverlay('heading')}>Add a heading</button>
+                  <button className="text-preset subheading" onClick={() => addTextOverlay('subheading')}>Add a subheading</button>
+                  <button className="text-preset body" onClick={() => addTextOverlay('body')}>Add a little bit of body text</button>
                 </div>
-              ))}
+              )}
+
+              <div className="elements-group">
+                <div className="elements-group-title">Uploads</div>
+                <div className="upload-element-grid">
+                  <label className="upload-element-card">
+                    <ImageIcon /><strong>Image</strong><small>JPG, PNG, WebP</small>
+                    <input type="file" accept="image/*" hidden onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) addMediaOverlay(file, 'image');
+                      event.target.value = '';
+                    }} />
+                  </label>
+                  <label className="upload-element-card">
+                    <VideoIcon /><strong>Video</strong><small>MP4, WebM</small>
+                    <input type="file" accept="video/*" hidden onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) addMediaOverlay(file, 'video');
+                      event.target.value = '';
+                    }} />
+                  </label>
+                </div>
+              </div>
+
+              {overlays.length > 0 && (
+                <div className="elements-group layers-group">
+                  <div className="elements-group-title">Layers <span>{overlays.length}</span></div>
+                  {overlays.slice().reverse().map((overlay) => (
+                    <div key={overlay.id} className={`element-layer ${selectedOverlayId === overlay.id ? 'active' : ''}`} onClick={() => setSelectedOverlayId(overlay.id)}>
+                      {overlay.type === 'text' ? <Type /> : overlay.type === 'image' ? <ImageIcon /> : <VideoIcon />}
+                      <span>{overlay.type === 'text' ? overlay.content : overlay.file?.name || overlay.type}</span>
+                      <button onClick={(event) => { event.stopPropagation(); setOverlays((items) => items.filter((item) => item.id !== overlay.id)); }} aria-label="Delete layer"><X /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

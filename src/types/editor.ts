@@ -12,6 +12,17 @@ export interface OverlayItem {
   height: number;
   startTime: number;
   endTime: number;
+  fontFamily?: string;
+  fontSize?: number;
+  color?: string;
+  backgroundColor?: string;
+  fontWeight?: 'normal' | 'bold';
+  fontStyle?: 'normal' | 'italic';
+  textDecoration?: 'none' | 'underline';
+  textAlign?: 'left' | 'center' | 'right';
+  opacity?: number;
+  rotation?: number;
+  borderRadius?: number;
 }
 
 export interface SubtitleItem {

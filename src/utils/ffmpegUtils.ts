@@ -40,13 +40,26 @@ async function renderTextOverlay(overlay: OverlayItem, width: number, height: nu
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas is unavailable for text export.');
   const fontSize = Math.max(24, Math.round(height * (overlay.height / 100) * 0.65));
-  ctx.font = `bold ${fontSize}px sans-serif`;
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
+  ctx.font = `${overlay.fontStyle || 'normal'} ${overlay.fontWeight || 'bold'} ${overlay.fontSize || fontSize}px ${overlay.fontFamily || 'sans-serif'}`;
+  ctx.fillStyle = overlay.color || '#fff';
+  ctx.textAlign = overlay.textAlign || 'center';
   ctx.textBaseline = 'middle';
   ctx.shadowColor = 'rgba(0,0,0,.85)';
   ctx.shadowBlur = Math.max(4, Math.round(fontSize * 0.18));
-  ctx.fillText(overlay.content, width * overlay.x / 100, height * overlay.y / 100, width * overlay.width / 100);
+  const boxWidth = width * overlay.width / 100;
+  const boxHeight = height * overlay.height / 100;
+  const left = width * overlay.x / 100 - boxWidth / 2;
+  const top = height * overlay.y / 100 - boxHeight / 2;
+  if (overlay.backgroundColor && overlay.backgroundColor !== 'transparent') {
+    ctx.save();
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = overlay.backgroundColor;
+    ctx.fillRect(left, top, boxWidth, boxHeight);
+    ctx.restore();
+    ctx.fillStyle = overlay.color || '#fff';
+  }
+  const textX = overlay.textAlign === 'left' ? left : overlay.textAlign === 'right' ? left + boxWidth : width * overlay.x / 100;
+  ctx.fillText(overlay.content, textX, height * overlay.y / 100, boxWidth);
   return new Promise((resolve, reject) => canvas.toBlob(
     (blob) => blob ? resolve(blob) : reject(new Error('Could not render text overlay.')),
     'image/png',
@@ -128,8 +141,9 @@ export async function processVideo(
 
     overlayInputs.forEach(({ overlay, index, fullFrame }, overlayNumber) => {
       const prepared = `ov${overlayNumber}`;
-      if (fullFrame) filters.push(`[${index}:v]scale=${width}:${height}[${prepared}]`);
-      else filters.push(`[${index}:v]scale=${Math.max(2, Math.round(width * overlay.width / 100))}:${Math.max(2, Math.round(height * overlay.height / 100))}[${prepared}]`);
+      const opacity = Math.max(0.1, Math.min(1, overlay.opacity ?? 1));
+      if (fullFrame) filters.push(`[${index}:v]scale=${width}:${height},format=rgba,colorchannelmixer=aa=${opacity}[${prepared}]`);
+      else filters.push(`[${index}:v]scale=${Math.max(2, Math.round(width * overlay.width / 100))}:${Math.max(2, Math.round(height * overlay.height / 100))},format=rgba,colorchannelmixer=aa=${opacity}[${prepared}]`);
       const output = `vo${overlayNumber}`;
       const from = Math.max(0, overlay.startTime - startTime) / speed;
       const to = Math.max(from, Math.min(endTime, overlay.endTime) - startTime) / speed;

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Film, Play, Pause, Rewind, FastForward, X, Type } from 'lucide-react';
+import { Film, Play, Pause, Rewind, FastForward, X } from 'lucide-react';
 import type { ObjectFitMode, OutputFormat, OverlayItem, SubtitleItem } from '../types/editor';
+import OverlayToolbar from './OverlayToolbar';
 
 interface VideoPreviewProps {
   videoFile: File | null;
@@ -391,6 +392,24 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
   const trimmedDuration = Math.max(0.1, endTime - startTime);
   const pct = (relativeTime / trimmedDuration) * 100;
   const currentSubtitle = subtitles.find(s => time >= s.start && time <= s.end);
+  const selectedOverlay = overlays.find((overlay) => overlay.id === selectedOverlayId) || null;
+
+  const updateSelectedOverlay = (patch: Partial<OverlayItem>) => {
+    if (!selectedOverlayId) return;
+    setOverlays((items) => items.map((item) => item.id === selectedOverlayId ? { ...item, ...patch } : item));
+  };
+
+  const moveSelectedOverlay = (direction: 'forward' | 'backward') => {
+    if (!selectedOverlayId) return;
+    setOverlays((items) => {
+      const index = items.findIndex((item) => item.id === selectedOverlayId);
+      const nextIndex = direction === 'forward' ? Math.min(items.length - 1, index + 1) : Math.max(0, index - 1);
+      if (index < 0 || index === nextIndex) return items;
+      const next = [...items];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+  };
 
   const handleDrag = (_id: string, e: React.MouseEvent | React.TouchEvent) => {
     if (!draggingId) return;
@@ -456,6 +475,23 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
   
   return (
     <div className="preview-panel fade-up">
+      {selectedOverlay && (
+        <OverlayToolbar
+          overlay={selectedOverlay}
+          onChange={updateSelectedOverlay}
+          onDuplicate={() => {
+            const copy = { ...selectedOverlay, id: crypto.randomUUID(), x: Math.min(95, selectedOverlay.x + 3), y: Math.min(95, selectedOverlay.y + 3) };
+            setOverlays((items) => [...items, copy]);
+            setSelectedOverlayId(copy.id);
+          }}
+          onBringForward={() => moveSelectedOverlay('forward')}
+          onSendBackward={() => moveSelectedOverlay('backward')}
+          onDelete={() => {
+            setOverlays((items) => items.filter((item) => item.id !== selectedOverlay.id));
+            setSelectedOverlayId(null);
+          }}
+        />
+      )}
       <div className="preview-viewport">
         {videoUrl ? (
           <div 
@@ -513,6 +549,8 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
                     width: `${ov.width || 30}%`,
                     height: `${ov.height || (ov.type === 'text' ? 10 : 30)}%`,
                     transform: 'translate(-50%, -50%)',
+                    rotate: `${ov.rotation || 0}deg`,
+                    opacity: ov.opacity ?? 1,
                     cursor: draggingId === ov.id ? 'grabbing' : 'grab',
                     zIndex: 30,
                     userSelect: 'none',
@@ -538,30 +576,33 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
                         className="ov-handle ov-handle-br" 
                         onMouseDown={(e) => { e.stopPropagation(); setResizingId(ov.id); }}
                       />
-                      <button 
-                        className="ov-handle ov-handle-tl"
-                        onMouseDown={(e) => { 
-                          e.stopPropagation(); 
-                          const newText = prompt("Edit text:", ov.content);
-                          if (newText) setOverlays(overlays.map(o => o.id === ov.id ? { ...o, content: newText } : o));
-                        }}
-                      >
-                        <Type style={{ width: 10, height: 10 }} />
-                      </button>
                     </>
                   )}
 
                   {ov.type === 'text' && (
-                    <span style={{
-                      color: 'white',
-                      fontWeight: 'bold',
-                      fontSize: format === 'youtube' ? '3vw' : '6vw',
+                    <span
+                      contentEditable={isSelected}
+                      suppressContentEditableWarning
+                      onMouseDown={(event) => isSelected && event.stopPropagation()}
+                      onBlur={(event) => updateSelectedOverlay({ content: event.currentTarget.textContent || 'Text' })}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      style={{
+                      color: ov.color || 'white',
+                      background: ov.backgroundColor || 'transparent',
+                      fontFamily: ov.fontFamily || 'Inter, sans-serif',
+                      fontWeight: ov.fontWeight || 'bold',
+                      fontStyle: ov.fontStyle || 'normal',
+                      textDecoration: ov.textDecoration || 'none',
+                      textAlign: ov.textAlign || 'center',
+                      fontSize: `${Math.max(12, (ov.fontSize || 48) * (format === 'youtube' ? 0.55 : 0.38))}px`,
                       textShadow: '0px 0px 10px rgba(0,0,0,0.8)',
                       whiteSpace: 'nowrap',
                       display: 'block',
                       width: '100%',
                       height: '100%',
-                      padding: '10px'
+                      padding: '10px',
+                      boxSizing: 'border-box',
+                      outline: 'none'
                     }}>
                       {ov.content}
                     </span>
