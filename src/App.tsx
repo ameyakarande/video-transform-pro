@@ -226,7 +226,7 @@ function App() {
       {page === 'how' ? (
         <HowItWorks onBack={goToEditor} />
       ) : page === 'auto' ? (
-        <AutoEditStudio onBack={goToEditor} onOpenClip={(file) => { handleVideoUpload(file); goToEditor(); }} />
+        <AutoEditStudio onBack={goToEditor} />
       ) : (
         <main className="app-main">
           <VideoPreview

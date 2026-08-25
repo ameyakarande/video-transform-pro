@@ -216,11 +216,14 @@ export async function processAutoEditSequence(
   shots: StoryShot[],
   format: OutputFormat,
   onProgress?: (progress: number) => void,
+  preview = false,
 ) {
   if (!shots.length) throw new Error('Add at least one shot to the first cut.');
   const instance = await loadFFmpeg();
   const runId = Date.now().toString(36);
-  const { width, height } = outputSize(format);
+  const output = outputSize(format);
+  const width = preview ? (format === 'youtube' ? 960 : 540) : output.width;
+  const height = preview ? (format === 'youtube' ? 540 : 960) : output.height;
   const createdFiles: string[] = [];
   const segments: string[] = [];
   const clipMap = new Map(clips.map((clip) => [clip.id, clip]));
@@ -235,7 +238,7 @@ export async function processAutoEditSequence(
       createdFiles.push(inputName, segmentName); segments.push(segmentName);
       await instance.writeFile(inputName, await fetchFile(clip.file));
       const scale = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1`;
-      const exitCode = await instance.exec(['-ss', String(shot.start), '-t', String(Math.max(.2, shot.end - shot.start)), '-i', inputName, '-vf', scale, '-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-movflags', '+faststart', segmentName]);
+      const exitCode = await instance.exec(['-ss', String(shot.start), '-t', String(Math.max(.2, shot.end - shot.start)), '-i', inputName, '-vf', scale, '-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', preview ? '30' : '23', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-movflags', '+faststart', segmentName]);
       if (exitCode !== 0) throw new Error(`Could not render shot ${index + 1}.`);
       onProgress?.((index + .7) / (shots.length + 1));
     }

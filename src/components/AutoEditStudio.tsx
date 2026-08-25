@@ -1,24 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowUp, Bot, Check, Download, Expand, Film, GripVertical, Library, LoaderCircle, PanelRight, Pause, Play, Plus, RotateCcw, Sparkles, Trash2, Upload, WandSparkles } from 'lucide-react';
-import type { AnalyzedClip, AutoEditBrief, StoryRole, StoryShot } from '../types/autoEdit';
+import { ArrowLeft, Bot, Check, Download, Expand, Film, LoaderCircle, Pause, Play, Plus, RotateCcw, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import type { AnalyzedClip, AutoEditBrief, StoryShot } from '../types/autoEdit';
 import { analyzeClip, createStoryline } from '../utils/autoEditAnalysis';
 import { processAutoEditSequence } from '../utils/ffmpegUtils';
 
-interface Props { onBack: () => void; onOpenClip: (file: File) => void; }
+interface Props { onBack: () => void; }
 const time = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
 
-export default function AutoEditStudio({ onBack, onOpenClip }: Props) {
+export default function AutoEditStudio({ onBack }: Props) {
   const [clips, setClips] = useState<AnalyzedClip[]>([]);
   const [shots, setShots] = useState<StoryShot[]>([]);
   const [brief, setBrief] = useState<AutoEditBrief>({ prompt: '', style: 'cinematic', targetDuration: 30, format: 'youtube' });
-  const [selectedShotId, setSelectedShotId] = useState('');
-  const [mediaOpen, setMediaOpen] = useState(true); const [briefOpen, setBriefOpen] = useState(true); const [playing, setPlaying] = useState(false);
+  const [selectedShotId, setSelectedShotId] = useState(''); const [playing, setPlaying] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(''); const [generating, setGenerating] = useState(false); const [generateProgress, setGenerateProgress] = useState(0);
   const [analyzing, setAnalyzing] = useState(false); const [analysisProgress, setAnalysisProgress] = useState(0);
   const [exporting, setExporting] = useState(false); const [exportProgress, setExportProgress] = useState(0); const [error, setError] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null); const previewRef = useRef<HTMLDivElement>(null);
   const clipsRef = useRef<AnalyzedClip[]>([]);
   useEffect(() => { clipsRef.current = clips; }, [clips]);
-  useEffect(() => () => clipsRef.current.forEach((clip) => URL.revokeObjectURL(clip.url)), []);
+  useEffect(() => () => { clipsRef.current.forEach((clip) => URL.revokeObjectURL(clip.url)); }, []);
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
   const selectedShot = shots.find((shot) => shot.id === selectedShotId) || shots[0];
   const selectedClip = clips.find((clip) => clip.id === selectedShot?.clipId);
@@ -28,12 +29,12 @@ export default function AutoEditStudio({ onBack, onOpenClip }: Props) {
   const clipMap = useMemo(() => new Map(clips.map((clip) => [clip.id, clip])), [clips]);
 
   useEffect(() => {
-    const video = videoRef.current; if (!video || !selectedShot) return;
+    const video = videoRef.current; if (!video || !selectedShot || previewUrl) return;
     const onLoaded = () => { video.currentTime = selectedShot.start; };
     const onTime = () => { if (video.currentTime >= selectedShot.end) video.pause(); };
     video.addEventListener('loadedmetadata', onLoaded); video.addEventListener('timeupdate', onTime);
     return () => { video.removeEventListener('loadedmetadata', onLoaded); video.removeEventListener('timeupdate', onTime); };
-  }, [selectedShot, selectedClip]);
+  }, [selectedShot, selectedClip, previewUrl]);
 
   const addFiles = async (files: File[]) => {
     const accepted = files.filter((file) => file.type.startsWith('video/')).slice(0, Math.max(0, 20 - clips.length));
@@ -47,10 +48,13 @@ export default function AutoEditStudio({ onBack, onOpenClip }: Props) {
     finally { setAnalyzing(false); }
   };
 
-  const generate = () => { const next = createStoryline(clips, brief); setShots(next); setSelectedShotId(next[0]?.id || ''); setMediaOpen(false); setBriefOpen(false); };
-  const togglePlayback = () => { const video = videoRef.current; if (!video) return; if (video.paused) { if (selectedShot && (video.currentTime < selectedShot.start || video.currentTime >= selectedShot.end)) video.currentTime = selectedShot.start; void video.play(); } else video.pause(); };
-  const move = (index: number, direction: -1 | 1) => setShots((current) => { const target = index + direction; if (target < 0 || target >= current.length) return current; const next = [...current]; [next[index], next[target]] = [next[target], next[index]]; return next; });
-  const updateShot = (id: string, patch: Partial<StoryShot>) => setShots((current) => current.map((shot) => shot.id === id ? { ...shot, ...patch } : shot));
+  const generate = async () => {
+    const next = createStoryline(clips, brief); setShots(next); setSelectedShotId(next[0]?.id || ''); setGenerating(true); setGenerateProgress(0); setError('');
+    try { const blob = await processAutoEditSequence(clips, next, brief.format, setGenerateProgress, true); if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(URL.createObjectURL(blob)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not build the generated preview.'); }
+    finally { setGenerating(false); }
+  };
+  const togglePlayback = () => { const video = videoRef.current; if (!video) return; if (video.paused) { if (!previewUrl && selectedShot && (video.currentTime < selectedShot.start || video.currentTime >= selectedShot.end)) video.currentTime = selectedShot.start; void video.play(); } else video.pause(); };
   const removeClip = (id: string) => { const clip = clipMap.get(id); if (clip) URL.revokeObjectURL(clip.url); setClips((current) => current.filter((item) => item.id !== id)); setShots((current) => current.filter((shot) => shot.clipId !== id)); };
   const exportFirstCut = async () => {
     if (!shots.length) return; setExporting(true); setError(''); setExportProgress(0);
@@ -59,23 +63,21 @@ export default function AutoEditStudio({ onBack, onOpenClip }: Props) {
     finally { setExporting(false); }
   };
 
-  return <main className="auto-edit-page">
-    <div className="auto-edit-topbar"><button onClick={onBack}><ArrowLeft /> Manual editor</button><div><span><WandSparkles /></span><div><strong>AI Auto Edit</strong><small>Editable first cut</small></div></div><div className="auto-edit-toolbar"><button className={mediaOpen ? 'active' : ''} onClick={() => setMediaOpen((value) => !value)}><Library /> Media <b>{clips.length}</b></button><button className={briefOpen ? 'active' : ''} onClick={() => setBriefOpen((value) => !value)}><PanelRight /> Brief</button><span>{time(totalDuration)}</span></div></div>
-    <div className={`auto-edit-grid ${mediaOpen ? '' : 'media-closed'} ${briefOpen ? '' : 'brief-closed'}`}>
-      <aside className="auto-media-panel">
-        <div className="auto-panel-title"><div><strong>Media</strong><small>Local analysis · originals stay in browser</small></div><label><Plus /><input hidden multiple type="file" accept="video/*" onChange={(event) => { void addFiles(Array.from(event.target.files || [])); event.target.value = ''; }} /></label></div>
-        {!clips.length && <label className="auto-dropzone"><Upload /><strong>Upload your raw footage</strong><span>Select 2–20 video clips</span><input hidden multiple type="file" accept="video/*" onChange={(event) => void addFiles(Array.from(event.target.files || []))} /></label>}
-        {analyzing && <div className="auto-analysis-progress"><LoaderCircle className="spin" /><span>Inspecting footage… {Math.round(analysisProgress * 100)}%</span><i style={{ width: `${analysisProgress * 100}%` }} /></div>}
-        <div className="auto-media-list">{clips.map((clip) => <article key={clip.id} className="auto-media-card"><img src={clip.thumbnail} /><div><strong>{clip.file.name}</strong><span>{time(clip.duration)} · {clip.width}×{clip.height}</span><small><b>{clip.quality}</b> quality · {clip.motion > .55 ? 'high motion' : clip.motion > .25 ? 'balanced motion' : 'steady'}</small></div><button onClick={() => removeClip(clip.id)} aria-label="Remove clip"><Trash2 /></button></article>)}</div>
-      </aside>
-
-      <section className="auto-workspace">
-        <div className="auto-preview" ref={previewRef}>{selectedClip ? <><video ref={videoRef} key={selectedClip.id} src={selectedClip.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onClick={togglePlayback} /><button className="auto-preview-play" onClick={togglePlayback} aria-label={playing ? 'Pause' : 'Play'}>{playing ? <Pause /> : <Play />}</button><button className="auto-preview-fullscreen" onClick={() => void previewRef.current?.requestFullscreen()}><Expand /> Fullscreen</button><div className="auto-preview-badge">{selectedShot?.role} · {time(selectedShot?.start || 0)}–{time(selectedShot?.end || 0)}</div></> : <div className="auto-preview-empty"><Film /><span>Your generated sequence will preview here</span></div>}</div>
-        <div className="auto-story-header"><div><strong>Editable first cut</strong><small>{shots.length ? `${shots.length} shots · ${time(totalDuration)}` : 'Generate a story to build the sequence'}</small></div>{shots.length > 0 && <><button onClick={generate}><RotateCcw /> Regenerate</button><button className="auto-export" disabled={exporting} onClick={() => void exportFirstCut()}>{exporting ? <LoaderCircle className="spin" /> : <Download />}{exporting ? `${Math.round(exportProgress * 100)}%` : 'Export first cut'}</button></>}</div>
-        <div className="auto-timeline">{shots.map((shot, index) => { const clip = clipMap.get(shot.clipId); if (!clip) return null; return <article key={shot.id} className={`auto-story-shot ${selectedShot?.id === shot.id ? 'active' : ''}`} onClick={() => setSelectedShotId(shot.id)}><GripVertical /><img src={clip.thumbnail} /><div className="auto-shot-main"><div><span className={`role-${shot.role}`}>{shot.role}</span><strong>{clip.file.name}</strong></div><input value={shot.note} onChange={(event) => updateShot(shot.id, { note: event.target.value })} onClick={(event) => event.stopPropagation()} /></div><div className="auto-shot-trim"><label>In<input type="number" min="0" max={shot.end - .2} step=".1" value={shot.start.toFixed(1)} onChange={(event) => updateShot(shot.id, { start: Math.max(0, Number(event.target.value)) })} /></label><label>Out<input type="number" min={shot.start + .2} max={clip.duration} step=".1" value={shot.end.toFixed(1)} onChange={(event) => updateShot(shot.id, { end: Math.min(clip.duration, Number(event.target.value)) })} /></label></div><select value={shot.role} onChange={(event) => updateShot(shot.id, { role: event.target.value as StoryRole })}><option value="hook">Hook</option><option value="setup">Setup</option><option value="development">Development</option><option value="highlight">Highlight</option><option value="ending">Ending</option></select><div className="auto-shot-actions"><button disabled={index === 0} onClick={(event) => { event.stopPropagation(); move(index, -1); }}><ArrowUp /></button><button disabled={index === shots.length - 1} onClick={(event) => { event.stopPropagation(); move(index, 1); }}><ArrowDown /></button><button onClick={(event) => { event.stopPropagation(); setShots((current) => current.filter((item) => item.id !== shot.id)); }}><Trash2 /></button></div></article>; })}</div>
-      </section>
-
-      <aside className="auto-brief-panel"><div className="auto-ai-heading"><span><Bot /></span><div><strong>Creative brief</strong><small>Tell the editor what to make</small></div></div><label className="auto-field"><span>What should the video communicate?</span><textarea value={brief.prompt} onChange={(event) => setBrief({ ...brief, prompt: event.target.value })} placeholder="Example: Create an energetic 45-second recap that opens with the crowd, builds toward the performance, and ends on the celebration." /></label><label className="auto-field"><span>Editing style</span><select value={brief.style} onChange={(event) => setBrief({ ...brief, style: event.target.value as AutoEditBrief['style'] })}><option value="cinematic">Cinematic story</option><option value="energetic">Fast & energetic</option><option value="documentary">Documentary</option><option value="social">Social highlight</option></select></label><label className="auto-field"><span>Target duration</span><div className="auto-duration-options">{[15, 30, 60, 90].map((value) => <button key={value} className={brief.targetDuration === value ? 'active' : ''} onClick={() => setBrief({ ...brief, targetDuration: value })}>{value}s</button>)}</div></label><label className="auto-field"><span>Output</span><div className="auto-duration-options"><button className={brief.format === 'youtube' ? 'active' : ''} onClick={() => setBrief({ ...brief, format: 'youtube' })}>16:9</button><button className={brief.format === 'instagram' ? 'active' : ''} onClick={() => setBrief({ ...brief, format: 'instagram' })}>9:16</button></div></label>{clips.length > 0 && <div className="auto-insights"><strong>Footage insights</strong><span><Check /> {clips.length} usable clips</span><span><Check /> {qualityAverage}% average quality</span><span><Check /> {time(clips.reduce((sum, clip) => sum + clip.duration, 0))} source footage</span></div>}{error && <p className="look-match-error">{error}</p>}<button className="auto-generate" disabled={!canGenerate || analyzing} onClick={generate}><Sparkles />{shots.length ? 'Create a new storyline' : 'Analyze story & create first cut'}</button>{!canGenerate && <small className="auto-requirement">Add at least two clips and describe the intended story.</small>}{selectedClip && <button className="auto-manual" onClick={() => onOpenClip(selectedClip.file)}>Open selected clip in manual editor</button>}</aside>
-    </div>
+  return <main className="auto-edit-page auto-classic">
+    <section className="auto-classic-stage">
+      <div className="auto-classic-canvas" ref={previewRef}>
+        {generating ? <div className="auto-rendering"><LoaderCircle className="spin" /><strong>Building your AI first cut</strong><span>Assembling the proposed movie… {Math.round(generateProgress * 100)}%</span><i><b style={{ width: `${generateProgress * 100}%` }} /></i></div>
+          : previewUrl || selectedClip ? <><video ref={videoRef} key={previewUrl || selectedClip?.id} src={previewUrl || selectedClip?.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onClick={togglePlayback} /><button className="auto-preview-play" onClick={togglePlayback}>{playing ? <Pause /> : <Play />}</button><button className="auto-preview-fullscreen" onClick={() => void previewRef.current?.requestFullscreen()}><Expand /> Fullscreen</button>{previewUrl && <div className="auto-generated-badge"><Sparkles /> AI generated first-cut preview · {time(totalDuration)}</div>}</>
+          : <label className="auto-classic-empty"><Film /><strong>Upload your footage to create a movie</strong><span>MP4 · MOV · WebM · Select 2–20 clips</span><input hidden multiple type="file" accept="video/*" onChange={(event) => void addFiles(Array.from(event.target.files || []))} /></label>}
+      </div>
+      {shots.length > 0 && <div className="auto-cut-strip"><div className="auto-cut-strip-head"><div><strong>AI first cut</strong><span>{shots.length} shots · {time(totalDuration)}</span></div><button onClick={() => void generate()}><RotateCcw /> Rebuild preview</button></div><div className="auto-cut-cards">{shots.map((shot, index) => { const clip = clipMap.get(shot.clipId); if (!clip) return null; return <article key={shot.id} className={selectedShot?.id === shot.id ? 'active' : ''} onClick={() => setSelectedShotId(shot.id)}><img src={clip.thumbnail} /><span>{index + 1}</span><small>{shot.role}</small><button onClick={(event) => { event.stopPropagation(); setShots((current) => current.filter((item) => item.id !== shot.id)); setPreviewUrl(''); }}><X /></button></article>; })}</div></div>}
+    </section>
+    <aside className="auto-classic-controls">
+      <div className="auto-control-section"><div className="auto-control-title"><span><Upload /></span><div><strong>Source videos</strong><small>{clips.length ? `${clips.length} clips added` : 'Add your raw footage'}</small></div><label><Plus /><input hidden multiple type="file" accept="video/*" onChange={(event) => { void addFiles(Array.from(event.target.files || [])); event.target.value = ''; }} /></label></div>{!clips.length && <label className="auto-side-upload"><Upload /> Upload multiple video files<input hidden multiple type="file" accept="video/*" onChange={(event) => void addFiles(Array.from(event.target.files || []))} /></label>}{analyzing && <div className="auto-analysis-progress"><LoaderCircle className="spin" /><span>Inspecting footage… {Math.round(analysisProgress * 100)}%</span><i style={{ width: `${analysisProgress * 100}%` }} /></div>}<div className="auto-source-grid">{clips.map((clip) => <article key={clip.id}><img src={clip.thumbnail} /><div><strong>{clip.file.name}</strong><span>{time(clip.duration)} · quality {clip.quality}</span></div><button onClick={() => removeClip(clip.id)}><Trash2 /></button></article>)}</div></div>
+      <div className="auto-control-section"><div className="auto-control-title"><span><Bot /></span><div><strong>AI creative brief</strong><small>Describe the movie you want</small></div></div><label className="auto-field"><textarea value={brief.prompt} onChange={(event) => setBrief({ ...brief, prompt: event.target.value })} placeholder="Create a cinematic travel film with a strong opening, natural progression and memorable ending." /></label><label className="auto-field"><span>Editing style</span><select value={brief.style} onChange={(event) => setBrief({ ...brief, style: event.target.value as AutoEditBrief['style'] })}><option value="cinematic">Cinematic story</option><option value="energetic">Fast & energetic</option><option value="documentary">Documentary</option><option value="social">Social highlight</option></select></label></div>
+      <div className="auto-control-section"><div className="auto-control-title simple"><strong>Output & duration</strong></div><div className="auto-format-row"><button className={brief.format === 'youtube' ? 'active' : ''} onClick={() => setBrief({ ...brief, format: 'youtube' })}><Play /> 16:9</button><button className={brief.format === 'instagram' ? 'active' : ''} onClick={() => setBrief({ ...brief, format: 'instagram' })}>▯ 9:16</button></div><div className="auto-duration-options">{[15, 30, 60, 90].map((value) => <button key={value} className={brief.targetDuration === value ? 'active' : ''} onClick={() => setBrief({ ...brief, targetDuration: value })}>{value}s</button>)}</div></div>
+      {clips.length > 0 && <div className="auto-control-section"><div className="auto-insights"><strong>Footage insights</strong><span><Check /> {clips.length} usable clips</span><span><Check /> {qualityAverage}% average quality</span><span><Check /> {time(clips.reduce((sum, clip) => sum + clip.duration, 0))} source footage</span></div></div>}
+      <div className="auto-control-actions">{error && <p className="look-match-error">{error}</p>}<button className="auto-generate" disabled={!canGenerate || analyzing || generating} onClick={() => void generate()}>{generating ? <LoaderCircle className="spin" /> : <Sparkles />}{generating ? `Creating preview ${Math.round(generateProgress * 100)}%` : previewUrl ? 'Generate a new first cut' : 'Create AI video preview'}</button>{previewUrl && <button className="auto-export" disabled={exporting} onClick={() => void exportFirstCut()}>{exporting ? <LoaderCircle className="spin" /> : <Download />}{exporting ? `Exporting ${Math.round(exportProgress * 100)}%` : 'Export final video'}</button>}<button className="auto-back" onClick={onBack}><ArrowLeft /> Back to manual editor</button></div>
+    </aside>
   </main>;
 }
