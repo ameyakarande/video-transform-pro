@@ -226,6 +226,7 @@ function App() {
             onVideoUpload={handleVideoUpload}
             onDurationLoaded={handleDurationLoaded}
             speed={speed}
+            onSpeedChange={setSpeed}
             isMuted={isMuted}
             overlays={overlays}
             setOverlays={setOverlays}

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Film, Play, Pause, Rewind, FastForward, RotateCw } from 'lucide-react';
+import { Film, Maximize, Pause, Play, RotateCw, Settings, Volume2, VolumeX } from 'lucide-react';
 import type { ObjectFitMode, OutputFormat, OverlayItem, SubtitleItem } from '../types/editor';
 import OverlayToolbar from './OverlayToolbar';
 
@@ -12,6 +12,7 @@ interface VideoPreviewProps {
   onVideoUpload: (file: File) => void;
   onDurationLoaded?: (duration: number) => void;
   speed: number;
+  onSpeedChange: (speed: number) => void;
   isMuted: boolean;
   overlays: OverlayItem[];
   setOverlays: React.Dispatch<React.SetStateAction<OverlayItem[]>>;
@@ -212,11 +213,12 @@ function mediaFilter(overlay: OverlayItem) {
 
 const VideoPreview: React.FC<VideoPreviewProps> = ({
   videoFile, startTime, endTime, format, lutFiles, onVideoUpload, onDurationLoaded,
-  speed, isMuted, overlays, setOverlays, subtitles,
+  speed, onSpeedChange, isMuted, overlays, setOverlays, subtitles,
   objectFit, selectedOverlayId, setSelectedOverlayId
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<LutRendererType>(null);
   const rafRef = useRef(0);
   const videoFrameRef = useRef<number | null>(null);
@@ -231,6 +233,10 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
   const [resizeState, setResizeState] = useState<ResizeState | null>(null);
   const [rotationState, setRotationState] = useState<{ id: string; startAngle: number; startRotation: number } | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [volume, setVolume] = useState(1);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
+  const controlsTimerRef = useRef<number | null>(null);
 
   // Mount/unmount
   useEffect(() => {
@@ -244,6 +250,7 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
       }
       rendererRef.current?.dispose();
       rendererRef.current = null;
+      if (controlsTimerRef.current !== null) window.clearTimeout(controlsTimerRef.current);
     };
   }, []);
 
@@ -388,9 +395,10 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.playbackRate = speed;
-      videoRef.current.muted = isMuted;
+      videoRef.current.muted = isMuted || volume === 0;
+      videoRef.current.volume = volume;
     }
-  }, [speed, isMuted, videoUrl]);
+  }, [speed, isMuted, volume, videoUrl]);
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -399,18 +407,16 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
     else v.pause();
   };
 
-  const skipBack = () => {
-    if (videoRef.current) videoRef.current.currentTime -= 10;
-  };
-  const skipForward = () => {
-    if (videoRef.current) videoRef.current.currentTime += 10;
+  const showPlayerControls = () => {
+    setControlsVisible(true);
+    if (controlsTimerRef.current !== null) window.clearTimeout(controlsTimerRef.current);
+    if (playing) controlsTimerRef.current = window.setTimeout(() => setControlsVisible(false), 2200);
   };
 
-  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
-    const v = videoRef.current;
-    if (!v || !trimmedDuration) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    v.currentTime = startTime + (Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * trimmedDuration);
+  const toggleFullscreen = async () => {
+    if (!frameRef.current) return;
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await frameRef.current.requestFullscreen();
   };
 
   const relativeTime = Math.max(0, time - startTime);
@@ -570,8 +576,15 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
       <div className="preview-viewport">
         {videoUrl ? (
           <div 
+            ref={frameRef}
             className={`preview-frame ${format === 'instagram' ? 'fmt-instagram' : 'fmt-youtube'}`}
-            onMouseMove={(e) => draggingId && handleDrag(draggingId, e)}
+            onMouseMove={(e) => { showPlayerControls(); if (draggingId) handleDrag(draggingId, e); }}
+            onMouseLeave={() => playing && setControlsVisible(false)}
+            onClick={(event) => {
+              const target = event.target as HTMLElement;
+              if (target.closest('[data-overlay-id], .yt-player-controls, .split-slider')) return;
+              togglePlay();
+            }}
             onMouseUp={() => setDraggingId(null)}
             onTouchMove={(e) => draggingId && handleDrag(draggingId, e)}
             onTouchEnd={() => setDraggingId(null)}
@@ -614,6 +627,7 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
               return (
                 <div
                   key={ov.id}
+                  data-overlay-id={ov.id}
                   id={`ov-${ov.id}`}
                   onMouseDown={(e) => {
                     e.stopPropagation();
@@ -763,6 +777,39 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
                 />
               </>
             )}
+
+            <div className={`yt-player-controls ${controlsVisible || !playing ? 'visible' : ''}`} onClick={(event) => event.stopPropagation()}>
+              <input
+                className="yt-progress"
+                type="range"
+                min="0"
+                max={trimmedDuration}
+                step="0.01"
+                value={Math.min(trimmedDuration, relativeTime)}
+                onChange={(event) => {
+                  if (videoRef.current) videoRef.current.currentTime = startTime + Number(event.target.value);
+                }}
+                style={{ '--yt-progress': `${Math.min(100, Math.max(0, pct))}%` } as React.CSSProperties}
+                aria-label="Seek video"
+              />
+              <div className="yt-controls-row">
+                <button onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>{playing ? <Pause /> : <Play fill="currentColor" />}</button>
+                <button onClick={() => setVolume((current) => current === 0 ? 1 : 0)} aria-label={volume === 0 ? 'Unmute' : 'Mute'}>{volume === 0 ? <VolumeX /> : <Volume2 />}</button>
+                <input className="yt-volume" type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => setVolume(Number(event.target.value))} aria-label="Volume" />
+                <span className="yt-time">{fmt(relativeTime)} / {fmt(trimmedDuration)}</span>
+                <div className="yt-controls-spacer" />
+                <div className="yt-settings-wrap">
+                  {speedMenuOpen && (
+                    <div className="yt-speed-menu">
+                      <strong>Playback speed</strong>
+                      {[0.25, 0.5, 1, 1.5, 2].map((rate) => <button key={rate} className={speed === rate ? 'active' : ''} onClick={() => { onSpeedChange(rate); setSpeedMenuOpen(false); }}>{rate === 1 ? 'Normal' : `${rate}×`}</button>)}
+                    </div>
+                  )}
+                  <button onClick={() => setSpeedMenuOpen((open) => !open)} aria-label="Settings"><Settings /></button>
+                </div>
+                <button onClick={() => void toggleFullscreen()} aria-label="Fullscreen"><Maximize /></button>
+              </div>
+            </div>
           </div>
         ) : (
           <label className="preview-placeholder">
@@ -773,29 +820,6 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
           </label>
         )}
       </div>
-
-      {videoUrl && (
-        <div className="timeline" style={{ justifyContent: 'center' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <button className="tl-btn" onClick={skipBack}>
-              <Rewind style={{ width: 14, height: 14 }} />
-            </button>
-            <button className="tl-btn" onClick={togglePlay}>
-              {playing
-                ? <Pause style={{ width: 14, height: 14 }} />
-                : <Play style={{ width: 14, height: 14 }} />}
-            </button>
-            <button className="tl-btn" onClick={skipForward}>
-              <FastForward style={{ width: 14, height: 14 }} />
-            </button>
-          </div>
-          
-          <div className="tl-track" onClick={seek} style={{ marginLeft: '1rem', flex: 1 }}>
-            <div className="tl-fill" style={{ width: `${pct}%` }} />
-          </div>
-          <span className="tl-time">{fmt(relativeTime)} / {fmt(trimmedDuration)}</span>
-        </div>
-      )}
 
       {videoFile && (
         <div className="file-info">
