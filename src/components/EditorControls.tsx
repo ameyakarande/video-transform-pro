@@ -116,12 +116,36 @@ const EditorControls: React.FC<EditorControlsProps> = ({
     setSelectedOverlayId(id);
   };
 
-  const addMediaOverlay = (file: File, type: 'image' | 'video') => {
+  const addMediaOverlay = async (file: File, type: 'image' | 'video') => {
     const content = URL.createObjectURL(file);
+    let aspectRatio = 1;
+    try {
+      if (type === 'image') {
+        const bitmap = await createImageBitmap(file);
+        aspectRatio = bitmap.width / bitmap.height;
+        bitmap.close();
+      } else {
+        aspectRatio = await new Promise<number>((resolve, reject) => {
+          const probe = document.createElement('video');
+          probe.preload = 'metadata';
+          probe.onloadedmetadata = () => resolve(probe.videoWidth / probe.videoHeight);
+          probe.onerror = () => reject(new Error('Could not read video dimensions'));
+          probe.src = content;
+        });
+      }
+    } catch {
+      aspectRatio = 1;
+    }
+    const frameRatio = format === 'youtube' ? 16 / 9 : 9 / 16;
+    let width = 34;
+    let height = width * frameRatio / aspectRatio;
+    if (height > 65) { height = 65; width = height * aspectRatio / frameRatio; }
+    if (height < 12) { height = 12; width = height * aspectRatio / frameRatio; }
+    if (width > 72) { width = 72; height = width * frameRatio / aspectRatio; }
     const id = crypto.randomUUID();
     setOverlays((items) => [...items, {
       id, type, content, file, x: 50, y: 50,
-      width: 34, height: 34, startTime, endTime,
+      width, height, startTime, endTime,
       opacity: 1, rotation: 0, borderRadius: 0,
     }]);
     setSelectedOverlayId(id);
@@ -380,7 +404,7 @@ const EditorControls: React.FC<EditorControlsProps> = ({
                     <ImageIcon /><strong>Image</strong><small>JPG, PNG, WebP</small>
                     <input type="file" accept="image/*" hidden onChange={(event) => {
                       const file = event.target.files?.[0];
-                      if (file) addMediaOverlay(file, 'image');
+                      if (file) void addMediaOverlay(file, 'image');
                       event.target.value = '';
                     }} />
                   </label>
@@ -388,7 +412,7 @@ const EditorControls: React.FC<EditorControlsProps> = ({
                     <VideoIcon /><strong>Video</strong><small>MP4, WebM</small>
                     <input type="file" accept="video/*" hidden onChange={(event) => {
                       const file = event.target.files?.[0];
-                      if (file) addMediaOverlay(file, 'video');
+                      if (file) void addMediaOverlay(file, 'video');
                       event.target.value = '';
                     }} />
                   </label>

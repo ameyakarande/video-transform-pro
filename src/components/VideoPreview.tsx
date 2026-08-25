@@ -206,6 +206,7 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
   const [time, setTime] = useState(0);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [resizingId, setResizingId] = useState<string | null>(null);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
 
   // Mount/unmount
   useEffect(() => {
@@ -394,6 +395,15 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
   const currentSubtitle = subtitles.find(s => time >= s.start && time <= s.end);
   const selectedOverlay = overlays.find((overlay) => overlay.id === selectedOverlayId) || null;
 
+  useEffect(() => {
+    if (!editingTextId) return;
+    const frame = requestAnimationFrame(() => {
+      const element = document.querySelector<HTMLElement>(`[data-overlay-text="${CSS.escape(editingTextId)}"]`);
+      element?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editingTextId]);
+
   const updateSelectedOverlay = (patch: Partial<OverlayItem>) => {
     if (!selectedOverlayId) return;
     setOverlays((items) => items.map((item) => item.id === selectedOverlayId ? { ...item, ...patch } : item));
@@ -447,8 +457,11 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
         const dx = Math.abs(e.clientX - viewport.left - centerX);
         const dy = Math.abs(e.clientY - viewport.top - centerY);
         
-        const newWidth = (dx * 2 / viewport.width) * 100;
-        const newHeight = (dy * 2 / viewport.height) * 100;
+        const pointerWidth = (dx * 2 / viewport.width) * 100;
+        const pointerHeight = (dy * 2 / viewport.height) * 100;
+        const scale = Math.max(pointerWidth / ov.width, pointerHeight / ov.height);
+        const newWidth = Math.min(95, ov.width * scale);
+        const newHeight = Math.min(95, ov.height * scale);
         
         setOverlays((prev) => prev.map((o) => o.id === resizingId ? { 
           ...o, 
@@ -488,6 +501,10 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
           onSendBackward={() => moveSelectedOverlay('backward')}
           onDelete={() => {
             setOverlays((items) => items.filter((item) => item.id !== selectedOverlay.id));
+            setSelectedOverlayId(null);
+          }}
+          onClose={() => {
+            setEditingTextId(null);
             setSelectedOverlayId(null);
           }}
         />
@@ -540,31 +557,43 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
                 <div
                   key={ov.id}
                   id={`ov-${ov.id}`}
-                  onMouseDown={(e) => { e.stopPropagation(); setSelectedOverlayId(ov.id); setDraggingId(ov.id); }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setSelectedOverlayId(ov.id);
+                    if (editingTextId !== ov.id) setDraggingId(ov.id);
+                  }}
                   onTouchStart={(e) => { e.stopPropagation(); setSelectedOverlayId(ov.id); setDraggingId(ov.id); }}
+                  onDoubleClick={(event) => {
+                    if (ov.type !== 'text') return;
+                    event.stopPropagation();
+                    setDraggingId(null);
+                    setEditingTextId(ov.id);
+                  }}
                   style={{
                     position: 'absolute',
                     left: `${ov.x}%`,
                     top: `${ov.y}%`,
-                    width: `${ov.width || 30}%`,
-                    height: `${ov.height || (ov.type === 'text' ? 10 : 30)}%`,
+                    width: ov.type === 'text' ? 'max-content' : `${ov.width || 30}%`,
+                    maxWidth: ov.type === 'text' ? '92%' : undefined,
+                    height: ov.type === 'text' ? 'auto' : `${ov.height || 30}%`,
                     transform: 'translate(-50%, -50%)',
                     rotate: `${ov.rotation || 0}deg`,
                     opacity: ov.opacity ?? 1,
                     cursor: draggingId === ov.id ? 'grabbing' : 'grab',
                     zIndex: 30,
                     userSelect: 'none',
-                    border: isSelected ? '2px solid var(--accent)' : '2px solid transparent',
+                    border: ov.type === 'text' ? '1px solid transparent' : isSelected ? '2px solid var(--accent)' : '2px solid transparent',
+                    outline: ov.type === 'text' && isSelected ? '1px dashed rgba(255,255,255,.75)' : 'none',
                     borderRadius: '4px',
                     pointerEvents: (draggingId && draggingId !== ov.id) || resizingId ? 'none' : 'auto',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    overflow: 'hidden'
+                    overflow: 'visible'
                   }}
                 >
                   {/* Selection Handles */}
-                  {isSelected && (
+                  {isSelected && ov.type !== 'text' && (
                     <>
                       <button 
                         className="ov-handle ov-handle-tr" 
@@ -581,10 +610,14 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
 
                   {ov.type === 'text' && (
                     <span
-                      contentEditable={isSelected}
+                      data-overlay-text={ov.id}
+                      contentEditable={editingTextId === ov.id}
                       suppressContentEditableWarning
-                      onMouseDown={(event) => isSelected && event.stopPropagation()}
-                      onBlur={(event) => updateSelectedOverlay({ content: event.currentTarget.textContent || 'Text' })}
+                      onMouseDown={(event) => editingTextId === ov.id && event.stopPropagation()}
+                      onBlur={(event) => {
+                        updateSelectedOverlay({ content: event.currentTarget.textContent || 'Text' });
+                        setEditingTextId(null);
+                      }}
                       onKeyDown={(event) => event.stopPropagation()}
                       style={{
                       color: ov.color || 'white',
@@ -598,9 +631,10 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
                       textShadow: '0px 0px 10px rgba(0,0,0,0.8)',
                       whiteSpace: 'nowrap',
                       display: 'block',
-                      width: '100%',
-                      height: '100%',
-                      padding: '10px',
+                      width: 'max-content',
+                      maxWidth: '100%',
+                      minHeight: '1em',
+                      padding: '4px 6px',
                       boxSizing: 'border-box',
                       outline: 'none'
                     }}>
@@ -608,10 +642,10 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
                     </span>
                   )}
                   {ov.type === 'image' && (
-                    <img src={ov.content} alt="" style={{ width: '100%', height: '100%', pointerEvents: 'none', borderRadius: '4px', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }} />
+                    <img src={ov.content} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none', borderRadius: `${ov.borderRadius || 0}px`, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }} />
                   )}
                   {ov.type === 'video' && (
-                    <video src={ov.content} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', pointerEvents: 'none', borderRadius: '4px', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }} />
+                    <video src={ov.content} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none', borderRadius: `${ov.borderRadius || 0}px`, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }} />
                   )}
                 </div>
               );
