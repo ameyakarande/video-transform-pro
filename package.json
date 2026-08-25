@@ -8,6 +8,7 @@
     "social-server": "node server/social-server.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "check": "npm run lint && npm run build",
     "preview": "vite preview"
   },
   "dependencies": {

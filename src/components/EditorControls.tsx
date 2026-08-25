@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import FilmstripTrim from './FilmstripTrim';
 import { fetchPresetCatalog, getPresetCatalog, type PresetCatalogItem } from '../utils/presetCatalog';
+import type { ObjectFitMode, OutputFormat, OverlayItem, SubtitleItem } from '../types/editor';
+import SocialPublish from './SocialPublish';
 
 const DEFAULT_PRESET_BACKEND_URL = (import.meta.env.VITE_SOCIAL_BACKEND_URL as string | undefined) || 'http://localhost:8787';
 
@@ -25,8 +27,8 @@ interface EditorControlsProps {
   onVideoClear: () => void;
   onLutToggle: (file: File) => void;
   onLutClear: () => void;
-  format: 'youtube' | 'instagram';
-  setFormat: (format: 'youtube' | 'instagram') => void;
+  format: OutputFormat;
+  setFormat: (format: OutputFormat) => void;
   startTime: number;
   endTime: number;
   duration: number;
@@ -41,12 +43,14 @@ interface EditorControlsProps {
   setIsMuted: (m: boolean) => void;
   bgMusicFile: File | null;
   setBgMusicFile: (f: File | null) => void;
-  overlays: any[];
-  setOverlays: (o: any[]) => void;
-  subtitles: any[];
+  overlays: OverlayItem[];
+  setOverlays: React.Dispatch<React.SetStateAction<OverlayItem[]>>;
+  subtitles: SubtitleItem[];
   onSubtitleUpload: (f: File) => void;
-  objectFit: 'cover' | 'contain';
-  setObjectFit: (o: 'cover' | 'contain') => void;
+  objectFit: ObjectFitMode;
+  setObjectFit: (o: ObjectFitMode) => void;
+  exportedVideo: Blob | null;
+  exportFileName: string;
 }
 
 const EditorControls: React.FC<EditorControlsProps> = ({
@@ -77,7 +81,9 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   subtitles,
   onSubtitleUpload,
   objectFit,
-  setObjectFit
+  setObjectFit,
+  exportedVideo,
+  exportFileName
 }) => {
   const [importTab, setImportTab] = useState<'custom' | 'presets'>('custom');
   const [presetsList, setPresetsList] = useState<PresetCatalogItem[]>([]);
@@ -226,7 +232,7 @@ const EditorControls: React.FC<EditorControlsProps> = ({
                         }
                       }
                       onLutToggle(file);
-                    } catch (err) {
+                    } catch {
                       alert(`Could not find ${preset.cubePath}. Please ensure the file is in the public/presets folder.`);
                     }
                   }}
@@ -341,11 +347,13 @@ const EditorControls: React.FC<EditorControlsProps> = ({
                 <input type="file" accept="image/*" hidden onChange={(e) => {
                   if (e.target.files?.[0]) {
                     const reader = new FileReader();
+                    const file = e.target.files[0];
                     reader.onload = (re) => {
                       setOverlays([...overlays, {
                         id: Date.now().toString(),
                         type: 'image',
-                        content: re.target?.result,
+                        content: String(re.target?.result || ''),
+                        file,
                         x: 50,
                         y: 50,
                         width: 30,
@@ -354,7 +362,7 @@ const EditorControls: React.FC<EditorControlsProps> = ({
                         endTime: duration || 10
                       }]);
                     };
-                    reader.readAsDataURL(e.target.files[0]);
+                    reader.readAsDataURL(file);
                   }
                 }} />
               </label>
@@ -362,11 +370,13 @@ const EditorControls: React.FC<EditorControlsProps> = ({
                 + Video
                 <input type="file" accept="video/*" hidden onChange={(e) => {
                   if (e.target.files?.[0]) {
-                    const url = URL.createObjectURL(e.target.files[0]);
+                    const file = e.target.files[0];
+                    const url = URL.createObjectURL(file);
                     setOverlays([...overlays, {
                       id: Date.now().toString(),
                       type: 'video',
                       content: url,
+                      file,
                       x: 50,
                       y: 50,
                       width: 30,
@@ -479,6 +489,9 @@ const EditorControls: React.FC<EditorControlsProps> = ({
             </button>
           </>
         )}
+      </div>
+      <div className="ctrl-section">
+        <SocialPublish videoBlob={exportedVideo} videoFileName={exportFileName} />
       </div>
     </div>
   );

@@ -45,12 +45,16 @@ async function parseJson<T>(response: Response): Promise<T> {
   return data as T;
 }
 
+const socialApiKey = (import.meta.env.VITE_SOCIAL_API_KEY as string | undefined)?.trim();
+const apiHeaders = (): Record<string, string> => socialApiKey ? { 'X-API-Key': socialApiKey } : {};
+
 export async function fetchSocialConnectionStatus(baseUrl: string): Promise<SocialConnectionStatus> {
   const normalized = trimBaseUrl(baseUrl);
   if (!normalized) return {};
 
   const response = await fetch(`${normalized}/api/social/connections/status`, {
     credentials: 'include',
+    headers: apiHeaders(),
   });
 
   return parseJson<SocialConnectionStatus>(response);
@@ -64,6 +68,7 @@ export async function beginSocialAuth(baseUrl: string, platform: 'instagram' | '
 
   const response = await fetch(`${normalized}/api/social/${platform}/auth-url`, {
     credentials: 'include',
+    headers: apiHeaders(),
   });
   const data = await parseJson<{ authUrl: string }>(response);
 
@@ -84,6 +89,7 @@ export async function publishInstagram(baseUrl: string, payload: InstagramPublis
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...apiHeaders(),
     },
     body: JSON.stringify({
       title: payload.title,
@@ -106,6 +112,7 @@ export async function publishTikTok(baseUrl: string, payload: TikTokPublishPaylo
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...apiHeaders(),
     },
     body: JSON.stringify({
       title: payload.title,

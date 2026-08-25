@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import VideoPreview from './components/VideoPreview';
 import EditorControls from './components/EditorControls';
 import HowItWorks from './components/HowItWorks';
 import { processVideo } from './utils/ffmpegUtils';
 import { BookOpen, Coffee, Download, Menu, Sparkles, X } from 'lucide-react';
+import type { ObjectFitMode, OutputFormat, OverlayItem, SubtitleItem } from './types/editor';
 
 function App() {
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
@@ -12,7 +13,7 @@ function App() {
   );
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [lutFiles, setLutFiles] = useState<File[]>([]);
-  const [format, setFormat] = useState<'youtube' | 'instagram'>('youtube');
+  const [format, setFormat] = useState<OutputFormat>('youtube');
   const [startTime, setStartTime] = useState(0);
   const [endTime, setEndTime] = useState(10);
   const [duration, setDuration] = useState(0);
@@ -23,10 +24,20 @@ function App() {
   const [speed, setSpeed] = useState<number>(1);
   const [isMuted, setIsMuted] = useState(false);
   const [bgMusicFile, setBgMusicFile] = useState<File | null>(null);
-  const [objectFit, setObjectFit] = useState<'cover' | 'contain'>('cover');
+  const [objectFit, setObjectFit] = useState<ObjectFitMode>('cover');
   const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
-  const [overlays, setOverlays] = useState<any[]>([]);
-  const [subtitles, setSubtitles] = useState<any[]>([]);
+  const [overlays, setOverlays] = useState<OverlayItem[]>([]);
+  const [subtitles, setSubtitles] = useState<SubtitleItem[]>([]);
+  const [exportedVideo, setExportedVideo] = useState<Blob | null>(null);
+  const previousOverlayUrls = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const currentUrls = new Set(overlays.filter((item) => item.type === 'video').map((item) => item.content));
+    previousOverlayUrls.current.forEach((url) => {
+      if (!currentUrls.has(url)) URL.revokeObjectURL(url);
+    });
+    previousOverlayUrls.current = currentUrls;
+  }, [overlays]);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -54,6 +65,7 @@ function App() {
     setVideoFile(file);
     setStartTime(0);
     setEndTime(10);
+    setExportedVideo(null);
   }, []);
 
   const handleDurationLoaded = useCallback((d: number) => {
@@ -114,7 +126,7 @@ function App() {
         end: toSec(timeMatch[2]),
         text: lines.slice(2).join('\n')
       };
-    }).filter(Boolean);
+    }).filter((item): item is SubtitleItem => item !== null);
     setSubtitles(parsed);
   }, []);
 
@@ -122,29 +134,6 @@ function App() {
     if (!videoFile) return;
     setIsProcessing(true);
     setProgress(0);
-
-    // Render overlays to PNG for FFmpeg (Simplified: only first text overlay for now to avoid crash)
-    let textOverlayDataUrl: string | undefined = undefined;
-    const textOverlay = overlays.find(o => o.type === 'text');
-    if (textOverlay) {
-      const canvas = document.createElement('canvas');
-      canvas.width = format === 'youtube' ? 1920 : 720;
-      canvas.height = format === 'youtube' ? 1080 : 1280;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 80px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.shadowColor = 'rgba(0,0,0,0.8)';
-        ctx.shadowBlur = 15;
-        // Position relative to canvas size
-        const x = (textOverlay.x / 100) * canvas.width;
-        const y = (textOverlay.y / 100) * canvas.height;
-        ctx.fillText(textOverlay.content, x, y);
-        textOverlayDataUrl = canvas.toDataURL('image/png');
-      }
-    }
 
     try {
       const blob = await processVideo(videoFile, { 
@@ -154,13 +143,17 @@ function App() {
         speed,
         isMuted,
         bgMusicFile,
-        textOverlayDataUrl,
-        lutFiles
+        lutFiles,
+        overlays,
+        subtitles,
+        objectFit,
       }, (p) => setProgress(p));
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `export-${format}-${Date.now()}.mp4`;
       a.click();
+      URL.revokeObjectURL(a.href);
+      setExportedVideo(blob);
     } catch (err) {
       console.error('Export failed:', err);
       alert('Export failed. Check console for details.');
@@ -208,11 +201,11 @@ function App() {
             <BookOpen style={{ width: 14, height: 14 }} />
             How it works
           </button>
-          <button className="header-action-btn coffee-btn" onClick={() => window.open('#', '_blank')}>
+          <a className="header-action-btn coffee-btn" href="mailto:?subject=Support%20Cinemaster">
             <Coffee style={{ width: 14, height: 14 }} />
             Buy me a coffee
-          </button>
-          <button className="header-action-btn desktop-btn" onClick={() => window.open('#', '_blank')}>
+          </a>
+          <button className="header-action-btn desktop-btn" disabled title="Desktop app is coming soon">
             <Download style={{ width: 14, height: 14 }} />
             <span>Get Desktop App</span>
             <small>Coming soon</small>
@@ -271,12 +264,14 @@ function App() {
             onSubtitleUpload={handleSubtitleUpload}
             objectFit={objectFit}
             setObjectFit={setObjectFit}
+            exportedVideo={exportedVideo}
+            exportFileName={`export-${format}.mp4`}
           />
         </main>
       )}
 
       <footer className="app-footer">
-        Powered by FFmpeg.wasm & WebGL2 · All processing happens locally in your browser
+        Powered by FFmpeg.wasm & WebGL2 · Video editing happens locally in your browser
       </footer>
     </div>
   );

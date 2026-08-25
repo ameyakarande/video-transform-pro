@@ -7,28 +7,6 @@ interface PresetCatalogItem {
   fallbackHue: number;
 }
 
-const cubeModules = import.meta.glob('/public/presets/*.cube', {
-  eager: true,
-  query: '?url',
-  import: 'default',
-}) as Record<string, string>;
-
-const imageModules = {
-  ...import.meta.glob('/public/presets/*.{jpg,jpeg,png,webp,avif}', {
-    eager: true,
-    query: '?url',
-    import: 'default',
-  }),
-} as Record<string, string>;
-
-function normalizeBaseName(filePath: string) {
-  return filePath
-    .split('/')
-    .pop()
-    ?.replace(/\.[^.]+$/, '')
-    .toLowerCase() || '';
-}
-
 function humanizePresetName(baseName: string) {
   return baseName
     .replace(/[-_]+/g, ' ')
@@ -46,22 +24,15 @@ function naturalPresetSort(left: PresetCatalogItem, right: PresetCatalogItem) {
 }
 
 export function getPresetCatalog(): PresetCatalogItem[] {
-  const imageLookup = new Map<string, string>();
-
-  Object.entries(imageModules).forEach(([filePath, assetUrl]) => {
-    imageLookup.set(normalizeBaseName(filePath), assetUrl);
-  });
-
-  return Object.entries(cubeModules)
-    .map(([filePath, assetUrl]) => {
-      const baseName = normalizeBaseName(filePath);
+  return Array.from({ length: 26 }, (_, index) => {
+      const baseName = `lut${index + 1}`;
 
       return {
         id: baseName,
         name: humanizePresetName(baseName),
         fileName: `${baseName}.cube`,
-        cubePath: assetUrl,
-        imagePath: imageLookup.get(baseName),
+        cubePath: `/presets/${baseName}.cube`,
+        imagePath: baseName === 'lut6' ? '/presets/lut6.jpg' : undefined,
         fallbackHue: makeFallbackHue(baseName),
       };
     })

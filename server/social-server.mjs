@@ -10,6 +10,9 @@ const projectRoot = path.resolve(__dirname, '..');
 const uploadsDir = path.join(projectRoot, 'server', 'uploads');
 const statePath = path.join(projectRoot, 'server', '.social-state.json');
 const presetsDir = path.join(projectRoot, 'public', 'presets');
+const MAX_REQUEST_BYTES = 250 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 180 * 1024 * 1024;
+const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 
 await ensureDirectory(uploadsDir);
 
@@ -18,6 +21,11 @@ const port = Number(env.SOCIAL_SERVER_PORT || 8787);
 const allowedOrigin = env.SOCIAL_ALLOWED_ORIGIN || 'http://localhost:5173';
 const publicBaseUrl = trimTrailingSlash(env.SOCIAL_PUBLIC_BASE_URL || `http://localhost:${port}`);
 const instagramGraphVersion = env.INSTAGRAM_GRAPH_VERSION || 'v23.0';
+const apiKey = env.SOCIAL_API_KEY || '';
+
+await removeExpiredUploads();
+const cleanupTimer = setInterval(() => void removeExpiredUploads(), 60 * 60 * 1000);
+cleanupTimer.unref();
 
 const server = createServer(async (req, res) => {
   try {
@@ -28,6 +36,10 @@ const server = createServer(async (req, res) => {
 
     const requestUrl = new URL(req.url, `http://localhost:${port}`);
     const { pathname } = requestUrl;
+
+    if (pathname.startsWith('/api/') && req.method !== 'OPTIONS') {
+      assertAllowedRequest(req, pathname);
+    }
 
     if (req.method === 'OPTIONS') {
       sendCors(res);
@@ -121,7 +133,7 @@ const server = createServer(async (req, res) => {
     sendJson(res, 404, { message: 'Route not found.' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Server error';
-    sendJson(res, 500, { message });
+    sendJson(res, error instanceof HttpError ? error.status : 500, { message });
   }
 });
 
@@ -366,14 +378,23 @@ async function waitForInstagramContainer(creationId, accessToken) {
 }
 
 async function writeVideoAndGetPublicUrl(filename, videoBase64) {
+  const estimatedBytes = Math.floor(videoBase64.length * 0.75);
+  if (estimatedBytes > MAX_VIDEO_BYTES) {
+    throw new HttpError(413, `Video exceeds the ${Math.floor(MAX_VIDEO_BYTES / 1024 / 1024)} MB publishing limit.`);
+  }
   const filePath = path.join(uploadsDir, filename);
   const buffer = Buffer.from(videoBase64, 'base64');
+  if (buffer.length > MAX_VIDEO_BYTES) throw new HttpError(413, 'Decoded video is too large.');
   await fs.writeFile(filePath, buffer);
   return `${publicBaseUrl}/uploads/${filename}`;
 }
 
 async function serveUpload(pathname, res) {
   const filename = decodeURIComponent(pathname.replace('/uploads/', ''));
+  if (!/^[a-zA-Z0-9-]+\.mp4$/.test(filename) || path.basename(filename) !== filename) {
+    sendJson(res, 400, { message: 'Invalid upload path.' });
+    return;
+  }
   const filePath = path.join(uploadsDir, filename);
 
   try {
@@ -396,7 +417,10 @@ function validatePublishPayload(payload) {
 
 async function readJsonBody(req) {
   const chunks = [];
+  let totalBytes = 0;
   for await (const chunk of req) {
+    totalBytes += chunk.length;
+    if (totalBytes > MAX_REQUEST_BYTES) throw new HttpError(413, 'Request body is too large.');
     chunks.push(chunk);
   }
 
@@ -415,11 +439,12 @@ async function readState() {
 
 async function writeState(state) {
   await fs.writeFile(statePath, JSON.stringify(state, null, 2), 'utf8');
+  await fs.chmod(statePath, 0o600).catch(() => undefined);
 }
 
 function sendCors(res) {
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-Key');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 }
@@ -428,8 +453,33 @@ function sendJson(res, status, payload) {
   sendCors(res);
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
   });
   res.end(JSON.stringify(payload));
+}
+
+class HttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function assertAllowedRequest(req, pathname) {
+  const origin = req.headers.origin;
+  if (origin && origin !== allowedOrigin) throw new HttpError(403, 'Origin is not allowed.');
+  const isOAuthCallback = pathname.endsWith('/callback');
+  if (!isOAuthCallback && apiKey && req.headers['x-api-key'] !== apiKey) throw new HttpError(401, 'Invalid API key.');
+}
+
+async function removeExpiredUploads() {
+  const entries = await fs.readdir(uploadsDir, { withFileTypes: true }).catch(() => []);
+  const cutoff = Date.now() - UPLOAD_TTL_MS;
+  await Promise.all(entries.filter((entry) => entry.isFile()).map(async (entry) => {
+    const filePath = path.join(uploadsDir, entry.name);
+    const stats = await fs.stat(filePath).catch(() => null);
+    if (stats && stats.mtimeMs < cutoff) await fs.unlink(filePath).catch(() => undefined);
+  }));
 }
 
 function sendHtml(res, status, html) {

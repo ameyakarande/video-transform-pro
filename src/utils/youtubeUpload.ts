@@ -9,11 +9,33 @@ declare global {
     google?: {
       accounts: {
         oauth2: {
-          initTokenClient: (config: any) => any;
+          initTokenClient: (config: GoogleTokenClientConfig) => GoogleTokenClient;
         };
       };
     };
   }
+}
+
+interface GoogleTokenResponse {
+  access_token: string;
+  expires_in: number;
+  error?: string;
+}
+
+interface GoogleTokenError {
+  type?: string;
+  message?: string;
+}
+
+interface GoogleTokenClientConfig {
+  client_id: string;
+  scope: string;
+  callback: (response: GoogleTokenResponse) => void;
+  error_callback: (error: GoogleTokenError) => void;
+}
+
+interface GoogleTokenClient {
+  requestAccessToken: () => void;
 }
 
 const YT_UPLOAD_SCOPE = 'https://www.googleapis.com/auth/youtube.upload';
@@ -50,7 +72,7 @@ export function requestYouTubeAuth(clientId: string): Promise<string> {
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: YT_UPLOAD_SCOPE,
-      callback: (response: any) => {
+      callback: (response: GoogleTokenResponse) => {
         if (response.error) {
           reject(new Error(`OAuth error: ${response.error}`));
           return;
@@ -59,7 +81,7 @@ export function requestYouTubeAuth(clientId: string): Promise<string> {
         tokenExpiry = Date.now() + (response.expires_in * 1000) - 60000; // 1 min buffer
         resolve(response.access_token);
       },
-      error_callback: (err: any) => {
+      error_callback: (err: GoogleTokenError) => {
         reject(new Error(`OAuth failed: ${err.type || err.message || 'Unknown error'}`));
       }
     });

@@ -1,29 +1,12 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Film, Play, Pause, Rewind, FastForward, X, Type } from 'lucide-react';
-
-interface OverlayItem {
-  id: string;
-  type: 'text' | 'image' | 'video';
-  content: string;
-  x: number;
-  y: number;
-  width?: number;
-  height?: number;
-  startTime: number;
-  endTime: number;
-}
-
-interface SubtitleItem {
-  start: number;
-  end: number;
-  text: string;
-}
+import type { ObjectFitMode, OutputFormat, OverlayItem, SubtitleItem } from '../types/editor';
 
 interface VideoPreviewProps {
   videoFile: File | null;
   startTime: number;
   endTime: number;
-  format: 'youtube' | 'instagram';
+  format: OutputFormat;
   lutFiles: File[];
   onVideoUpload: (file: File) => void;
   onDurationLoaded?: (duration: number) => void;
@@ -32,7 +15,7 @@ interface VideoPreviewProps {
   overlays: OverlayItem[];
   setOverlays: React.Dispatch<React.SetStateAction<OverlayItem[]>>;
   subtitles: SubtitleItem[];
-  objectFit: 'cover' | 'contain';
+  objectFit: ObjectFitMode;
   selectedOverlayId: string | null;
   setSelectedOverlayId: (id: string | null) => void;
 }
@@ -215,7 +198,7 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
   const videoFrameRef = useRef<number | null>(null);
   const aliveRef = useRef(true);
 
-  const [videoUrl, setVideoUrl] = useState('');
+  const videoUrl = useMemo(() => videoFile ? URL.createObjectURL(videoFile) : '', [videoFile]);
   const [lutCount, setLutCount] = useState(0);
   const [splitPos, setSplitPos] = useState(50);
   const [playing, setPlaying] = useState(false);
@@ -226,12 +209,12 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
   // Mount/unmount
   useEffect(() => {
     aliveRef.current = true;
+    const videoElement = videoRef.current as VideoFrameElement | null;
     return () => {
       aliveRef.current = false;
       cancelAnimationFrame(rafRef.current);
-      const v = videoRef.current as VideoFrameElement | null;
-      if (videoFrameRef.current !== null && v?.cancelVideoFrameCallback) {
-        v.cancelVideoFrameCallback(videoFrameRef.current);
+      if (videoFrameRef.current !== null && videoElement?.cancelVideoFrameCallback) {
+        videoElement.cancelVideoFrameCallback(videoFrameRef.current);
       }
       rendererRef.current?.dispose();
       rendererRef.current = null;
@@ -248,18 +231,18 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
     }
     rendererRef.current?.dispose();
     rendererRef.current = null;
-    setLutCount(0);
-    setSplitPos(50);
-    setPlaying(false);
-    setTime(0);
+    queueMicrotask(() => {
+      if (!aliveRef.current) return;
+      setLutCount(0);
+      setSplitPos(50);
+      setPlaying(false);
+      setTime(0);
+    });
 
-    if (videoFile) {
-      const u = URL.createObjectURL(videoFile);
-      setVideoUrl(u);
-      return () => URL.revokeObjectURL(u);
-    }
-    setVideoUrl('');
-  }, [videoFile]);
+    return () => {
+      if (videoUrl) URL.revokeObjectURL(videoUrl);
+    };
+  }, [videoUrl]);
 
   // Video events
   useEffect(() => {
@@ -295,7 +278,7 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
   useEffect(() => {
     if (lutFiles.length === 0) {
       rendererRef.current?.setLuts([]);
-      setLutCount(0);
+      queueMicrotask(() => aliveRef.current && setLutCount(0));
       return;
     }
 
@@ -341,6 +324,7 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
     }
   }, []);
 
+  const scheduleLutPreviewFrameRef = useRef<() => void>(() => undefined);
   const scheduleLutPreviewFrame = useCallback(() => {
     if (!aliveRef.current) return;
     const v = videoRef.current as VideoFrameElement | null;
@@ -350,16 +334,19 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
       videoFrameRef.current = v.requestVideoFrameCallback(() => {
         videoFrameRef.current = null;
         renderLutFrame();
-        scheduleLutPreviewFrame();
+        scheduleLutPreviewFrameRef.current();
       });
       return;
     }
 
     rafRef.current = requestAnimationFrame(() => {
       renderLutFrame();
-      scheduleLutPreviewFrame();
+      scheduleLutPreviewFrameRef.current();
     });
   }, [lutCount, renderLutFrame]);
+  useEffect(() => {
+    scheduleLutPreviewFrameRef.current = scheduleLutPreviewFrame;
+  }, [scheduleLutPreviewFrame]);
 
   useEffect(() => {
     cancelLutPreviewLoop();
@@ -382,7 +369,8 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
-    v.paused ? v.play() : v.pause();
+    if (v.paused) void v.play();
+    else v.pause();
   };
 
   const skipBack = () => {
@@ -464,7 +452,7 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [draggingId, resizingId, overlays]);
+  }, [draggingId, resizingId, overlays, setOverlays]);
   
   return (
     <div className="preview-panel fade-up">
