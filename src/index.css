@@ -1287,6 +1287,15 @@ body {
 .toolbar-drag-handle { cursor: grab !important; border-right: 1px solid #d8d8df !important; border-radius: 6px 0 0 6px !important; }
 .toolbar-drag-handle:active { cursor: grabbing !important; }
 .toolbar-close { margin-left: 2px; color: #666 !important; border-left: 1px solid #d8d8df !important; border-radius: 0 6px 6px 0 !important; }
+.media-editor-popover { position: absolute; top: calc(100% + 8px); left: 42px; width: 310px; max-height: min(520px, calc(100vh - 170px)); overflow-y: auto; display: grid; gap: 9px; padding: 12px; color: #262631; background: #fafafd; border: 1px solid #d9d9e2; border-radius: 11px; box-shadow: 0 14px 36px rgba(0,0,0,.32); }
+.media-editor-heading { display: flex; align-items: center; justify-content: space-between; }
+.media-editor-heading strong { font-size: .78rem; text-transform: capitalize; }
+.overlay-toolbar .media-editor-heading button { width: 25px; height: 25px; }
+.media-preset-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 5px; }
+.overlay-toolbar .media-preset-row button { width: auto; height: 34px; padding: 0 5px; border: 1px solid #dddde5; background: white; font-size: .58rem; }
+.media-adjust-row { display: grid; grid-template-columns: 68px 1fr 30px; align-items: center; gap: 7px; font-size: .62rem; color: #555561; }
+.media-adjust-row input { width: 100%; accent-color: #7657d6; }
+.media-adjust-row output { text-align: right; font-variant-numeric: tabular-nums; color: #777783; }
 .overlay-toolbar-kind { padding: 5px 8px; color: #666; background: #ececf2; border-radius: 6px; font-size: .62rem; font-weight: 700; text-transform: uppercase; }
 .toolbar-time { height: 32px; display: flex; align-items: center; gap: 3px; padding: 0 7px; border: 1px solid #d5d5dd; border-radius: 7px; background: white; color: #666; font-size: .58rem; }
 .toolbar-time svg { width: 15px; }

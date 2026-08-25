@@ -187,6 +187,18 @@ function fmt(s: number) {
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
+function mediaFilter(overlay: OverlayItem) {
+  return [
+    `brightness(${100 + (overlay.brightness || 0)}%)`,
+    `contrast(${100 + (overlay.contrast || 0)}%)`,
+    `saturate(${100 + (overlay.saturation || 0)}%)`,
+    `blur(${overlay.blur || 0}px)`,
+    `grayscale(${overlay.grayscale || 0}%)`,
+    `sepia(${overlay.sepia || 0}%)`,
+    `hue-rotate(${overlay.hueRotate || 0}deg)`,
+  ].join(' ');
+}
+
 const VideoPreview: React.FC<VideoPreviewProps> = ({
   videoFile, startTime, endTime, format, lutFiles, onVideoUpload, onDurationLoaded,
   speed, isMuted, overlays, setOverlays, subtitles,
@@ -582,7 +594,8 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
                     cursor: draggingId === ov.id ? 'grabbing' : 'grab',
                     zIndex: 30,
                     userSelect: 'none',
-                    border: ov.type === 'text' ? '1px solid transparent' : isSelected ? '2px solid var(--accent)' : '2px solid transparent',
+                    border: ov.type === 'text' ? '1px solid transparent' : isSelected ? '1px solid #8b5cf6' : 'none',
+                    boxSizing: 'border-box',
                     outline: ov.type === 'text' && isSelected ? '1px dashed rgba(255,255,255,.75)' : 'none',
                     borderRadius: '4px',
                     pointerEvents: (draggingId && draggingId !== ov.id) || resizingId ? 'none' : 'auto',
@@ -642,10 +655,18 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
                     </span>
                   )}
                   {ov.type === 'image' && (
-                    <img src={ov.content} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none', borderRadius: `${ov.borderRadius || 0}px`, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }} />
+                    <img src={ov.content} alt="" style={{ width: '100%', height: '100%', objectFit: ov.fit || 'contain', pointerEvents: 'none', borderRadius: `${ov.borderRadius || 0}px`, filter: mediaFilter(ov), transform: `scale(${ov.flipX ? -1 : 1}, ${ov.flipY ? -1 : 1})`, display: 'block' }} />
                   )}
                   {ov.type === 'video' && (
-                    <video src={ov.content} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none', borderRadius: `${ov.borderRadius || 0}px`, boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }} />
+                    <video
+                      ref={(element) => { if (element) element.playbackRate = ov.playbackRate || 1; }}
+                      src={ov.content}
+                      autoPlay
+                      loop={ov.loop !== false}
+                      muted={ov.muted !== false}
+                      playsInline
+                      style={{ width: '100%', height: '100%', objectFit: ov.fit || 'contain', pointerEvents: 'none', borderRadius: `${ov.borderRadius || 0}px`, filter: mediaFilter(ov), transform: `scale(${ov.flipX ? -1 : 1}, ${ov.flipY ? -1 : 1})`, display: 'block' }}
+                    />
                   )}
                 </div>
               );

@@ -23,6 +23,19 @@ export interface OverlayItem {
   opacity?: number;
   rotation?: number;
   borderRadius?: number;
+  fit?: 'contain' | 'cover';
+  flipX?: boolean;
+  flipY?: boolean;
+  brightness?: number;
+  contrast?: number;
+  saturation?: number;
+  blur?: number;
+  grayscale?: number;
+  sepia?: number;
+  hueRotate?: number;
+  playbackRate?: number;
+  muted?: boolean;
+  loop?: boolean;
 }
 
 export interface SubtitleItem {

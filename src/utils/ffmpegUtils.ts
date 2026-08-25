@@ -143,7 +143,27 @@ export async function processVideo(
       const prepared = `ov${overlayNumber}`;
       const opacity = Math.max(0.1, Math.min(1, overlay.opacity ?? 1));
       if (fullFrame) filters.push(`[${index}:v]scale=${width}:${height},format=rgba,colorchannelmixer=aa=${opacity}[${prepared}]`);
-      else filters.push(`[${index}:v]scale=${Math.max(2, Math.round(width * overlay.width / 100))}:${Math.max(2, Math.round(height * overlay.height / 100))},format=rgba,colorchannelmixer=aa=${opacity}[${prepared}]`);
+      else {
+        const targetWidth = Math.max(2, Math.round(width * overlay.width / 100));
+        const targetHeight = Math.max(2, Math.round(height * overlay.height / 100));
+        const mediaFilters: string[] = overlay.fit === 'cover'
+          ? [`scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase`, `crop=${targetWidth}:${targetHeight}`]
+          : [`scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease`, 'format=rgba', `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:color=0x00000000`];
+        mediaFilters.push(`eq=brightness=${(overlay.brightness || 0) / 100}:contrast=${Math.max(0.1, 1 + (overlay.contrast || 0) / 100)}:saturation=${Math.max(0, 1 + (overlay.saturation || 0) / 100)}`);
+        if (overlay.hueRotate) mediaFilters.push(`hue=h=${overlay.hueRotate}`);
+        if (overlay.grayscale && overlay.grayscale >= 50) mediaFilters.push('hue=s=0');
+        if (overlay.sepia && overlay.sepia >= 50) mediaFilters.push('colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131');
+        if (overlay.blur) mediaFilters.push(`gblur=sigma=${Math.max(0.1, overlay.blur / 2)}`);
+        if (overlay.flipX) mediaFilters.push('hflip');
+        if (overlay.flipY) mediaFilters.push('vflip');
+        if (overlay.type === 'video' && overlay.playbackRate && overlay.playbackRate !== 1) mediaFilters.push(`setpts=${1 / overlay.playbackRate}*PTS`);
+        const rotation = ((overlay.rotation || 0) % 360 + 360) % 360;
+        if (rotation === 90) mediaFilters.push('transpose=1');
+        else if (rotation === 180) mediaFilters.push('hflip', 'vflip');
+        else if (rotation === 270) mediaFilters.push('transpose=2');
+        mediaFilters.push('format=rgba', `colorchannelmixer=aa=${opacity}`);
+        filters.push(`[${index}:v]${mediaFilters.join(',')}[${prepared}]`);
+      }
       const output = `vo${overlayNumber}`;
       const from = Math.max(0, overlay.startTime - startTime) / speed;
       const to = Math.max(from, Math.min(endTime, overlay.endTime) - startTime) / speed;

@@ -146,7 +146,10 @@ const EditorControls: React.FC<EditorControlsProps> = ({
     setOverlays((items) => [...items, {
       id, type, content, file, x: 50, y: 50,
       width, height, startTime, endTime,
-      opacity: 1, rotation: 0, borderRadius: 0,
+      opacity: 1, rotation: 0, borderRadius: 0, fit: 'contain',
+      flipX: false, flipY: false, brightness: 0, contrast: 0,
+      saturation: 0, blur: 0, grayscale: 0, sepia: 0, hueRotate: 0,
+      playbackRate: 1, muted: true, loop: true,
     }]);
     setSelectedOverlayId(id);
   };
