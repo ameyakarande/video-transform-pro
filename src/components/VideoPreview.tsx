@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Film, Play, Pause, Rewind, FastForward, X } from 'lucide-react';
+import { Film, Play, Pause, Rewind, FastForward, RotateCw } from 'lucide-react';
 import type { ObjectFitMode, OutputFormat, OverlayItem, SubtitleItem } from '../types/editor';
 import OverlayToolbar from './OverlayToolbar';
 
@@ -181,6 +181,17 @@ type VideoFrameElement = HTMLVideoElement & {
   requestVideoFrameCallback?: (callback: () => void) => number;
   cancelVideoFrameCallback?: (handle: number) => void;
 };
+type ResizeDirection = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
+interface ResizeState {
+  id: string;
+  direction: ResizeDirection;
+  startClientX: number;
+  startClientY: number;
+  startX: number;
+  startY: number;
+  startWidth: number;
+  startHeight: number;
+}
 
 function fmt(s: number) {
   const m = Math.floor(s / 60);
@@ -217,7 +228,8 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [resizingId, setResizingId] = useState<string | null>(null);
+  const [resizeState, setResizeState] = useState<ResizeState | null>(null);
+  const [rotationState, setRotationState] = useState<{ id: string; startAngle: number; startRotation: number } | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
 
   // Mount/unmount
@@ -453,42 +465,76 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
     }
   };
 
+  const beginResize = (event: React.MouseEvent, overlay: OverlayItem, direction: ResizeDirection) => {
+    event.stopPropagation();
+    event.preventDefault();
+    setDraggingId(null);
+    setResizeState({
+      id: overlay.id,
+      direction,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: overlay.x,
+      startY: overlay.y,
+      startWidth: overlay.width,
+      startHeight: overlay.height,
+    });
+  };
+
   useEffect(() => {
     const handleWindowMouseMove = (e: MouseEvent) => {
-      if (resizingId) {
+      if (resizeState) {
         const viewport = videoRef.current?.parentElement?.getBoundingClientRect();
         if (!viewport) return;
-        
-        const ov = overlays.find((o) => o.id === resizingId);
-        if (!ov) return;
-        
-        // Calculate distance from mouse to center of overlay (ov.x, ov.y) in percent
-        const centerX = (ov.x / 100) * viewport.width;
-        const centerY = (ov.y / 100) * viewport.height;
-        
-        const dx = Math.abs(e.clientX - viewport.left - centerX);
-        const dy = Math.abs(e.clientY - viewport.top - centerY);
-        
-        const pointerWidth = (dx * 2 / viewport.width) * 100;
-        const pointerHeight = (dy * 2 / viewport.height) * 100;
-        const scale = Math.max(pointerWidth / ov.width, pointerHeight / ov.height);
-        const newWidth = Math.min(95, ov.width * scale);
-        const newHeight = Math.min(95, ov.height * scale);
-        
-        setOverlays((prev) => prev.map((o) => o.id === resizingId ? { 
-          ...o, 
-          width: Math.max(5, newWidth), 
-          height: Math.max(2, newHeight) 
-        } : o));
+        const dx = (e.clientX - resizeState.startClientX) / viewport.width * 100;
+        const dy = (e.clientY - resizeState.startClientY) / viewport.height * 100;
+        const { direction } = resizeState;
+        let width = resizeState.startWidth;
+        let height = resizeState.startHeight;
+        let x = resizeState.startX;
+        let y = resizeState.startY;
+
+        const horizontal = direction.includes('e') ? dx : direction.includes('w') ? -dx : 0;
+        const vertical = direction.includes('s') ? dy : direction.includes('n') ? -dy : 0;
+        if (direction.length === 2) {
+          const horizontalScale = horizontal / resizeState.startWidth;
+          const verticalScale = vertical / resizeState.startHeight;
+          const scaleDelta = Math.abs(horizontalScale) > Math.abs(verticalScale) ? horizontalScale : verticalScale;
+          width = Math.max(4, Math.min(95, resizeState.startWidth * (1 + scaleDelta)));
+          height = Math.max(4, Math.min(95, resizeState.startHeight * (1 + scaleDelta)));
+          const widthDelta = width - resizeState.startWidth;
+          const heightDelta = height - resizeState.startHeight;
+          x += (direction.includes('e') ? widthDelta : -widthDelta) / 2;
+          y += (direction.includes('s') ? heightDelta : -heightDelta) / 2;
+        } else if (direction === 'e' || direction === 'w') {
+          width = Math.max(4, Math.min(95, resizeState.startWidth + horizontal));
+          x += (direction === 'e' ? width - resizeState.startWidth : resizeState.startWidth - width) / 2;
+        } else {
+          height = Math.max(4, Math.min(95, resizeState.startHeight + vertical));
+          y += (direction === 's' ? height - resizeState.startHeight : resizeState.startHeight - height) / 2;
+        }
+        setOverlays((items) => items.map((item) => item.id === resizeState.id ? { ...item, width, height, x, y } : item));
+      }
+
+      if (rotationState) {
+        const viewport = videoRef.current?.parentElement?.getBoundingClientRect();
+        const overlay = overlays.find((item) => item.id === rotationState.id);
+        if (!viewport || !overlay) return;
+        const centerX = viewport.left + viewport.width * overlay.x / 100;
+        const centerY = viewport.top + viewport.height * overlay.y / 100;
+        const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * 180 / Math.PI;
+        const rotation = Math.round((rotationState.startRotation + angle - rotationState.startAngle) * 10) / 10;
+        setOverlays((items) => items.map((item) => item.id === rotationState.id ? { ...item, rotation } : item));
       }
     };
 
     const handleWindowMouseUp = () => {
       setDraggingId(null);
-      setResizingId(null);
+      setResizeState(null);
+      setRotationState(null);
     };
 
-    if (draggingId || resizingId) {
+    if (draggingId || resizeState || rotationState) {
       window.addEventListener('mousemove', handleWindowMouseMove);
       window.addEventListener('mouseup', handleWindowMouseUp);
     }
@@ -496,7 +542,7 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [draggingId, resizingId, overlays, setOverlays]);
+  }, [draggingId, resizeState, rotationState, overlays, setOverlays]);
   
   return (
     <div className="preview-panel fade-up">
@@ -598,7 +644,7 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
                     boxSizing: 'border-box',
                     outline: ov.type === 'text' && isSelected ? '1px dashed rgba(255,255,255,.75)' : 'none',
                     borderRadius: '4px',
-                    pointerEvents: (draggingId && draggingId !== ov.id) || resizingId ? 'none' : 'auto',
+                    pointerEvents: (draggingId && draggingId !== ov.id) || resizeState || rotationState ? 'none' : 'auto',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -608,16 +654,22 @@ const VideoPreview: React.FC<VideoPreviewProps> = ({
                   {/* Selection Handles */}
                   {isSelected && ov.type !== 'text' && (
                     <>
-                      <button 
-                        className="ov-handle ov-handle-tr" 
-                        onMouseDown={(e) => { e.stopPropagation(); setOverlays(overlays.filter(o => o.id !== ov.id)); setSelectedOverlayId(null); }}
-                      >
-                        <X style={{ width: 10, height: 10 }} />
-                      </button>
-                      <div 
-                        className="ov-handle ov-handle-br" 
-                        onMouseDown={(e) => { e.stopPropagation(); setResizingId(ov.id); }}
-                      />
+                      {(['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as ResizeDirection[]).map((direction) => (
+                        <div key={direction} className={`media-resize-handle handle-${direction}`} onMouseDown={(event) => beginResize(event, ov, direction)} />
+                      ))}
+                      <button
+                        className="media-rotate-handle"
+                        onMouseDown={(event) => {
+                          event.stopPropagation();
+                          event.preventDefault();
+                          const bounds = event.currentTarget.parentElement?.getBoundingClientRect();
+                          if (!bounds) return;
+                          const startAngle = Math.atan2(event.clientY - (bounds.top + bounds.height / 2), event.clientX - (bounds.left + bounds.width / 2)) * 180 / Math.PI;
+                          setDraggingId(null);
+                          setRotationState({ id: ov.id, startAngle, startRotation: ov.rotation || 0 });
+                        }}
+                        title="Rotate"
+                      ><RotateCw /></button>
                     </>
                   )}
 

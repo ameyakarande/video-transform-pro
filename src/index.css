@@ -1231,6 +1231,34 @@ body {
   width: 100%;
 }
 
+/* Canva-like media selection handles */
+.media-resize-handle {
+  position: absolute; z-index: 70; background: #fff; border: 1px solid #b8b8c2;
+  box-shadow: 0 1px 4px rgba(0,0,0,.28); user-select: none;
+}
+.handle-nw, .handle-ne, .handle-se, .handle-sw {
+  width: 14px; height: 14px; border-radius: 50%;
+}
+.handle-nw { left: -7px; top: -7px; cursor: nwse-resize; }
+.handle-ne { right: -7px; top: -7px; cursor: nesw-resize; }
+.handle-se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+.handle-sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+.handle-n, .handle-s { width: 24px; height: 8px; left: 50%; margin-left: -12px; border-radius: 999px; cursor: ns-resize; }
+.handle-n { top: -5px; }
+.handle-s { bottom: -5px; }
+.handle-e, .handle-w { width: 8px; height: 24px; top: 50%; margin-top: -12px; border-radius: 999px; cursor: ew-resize; }
+.handle-e { right: -5px; }
+.handle-w { left: -5px; }
+.media-rotate-handle {
+  position: absolute; right: -48px; top: 50%; width: 30px; height: 30px;
+  margin-top: -15px; display: grid; place-items: center; padding: 0;
+  color: #26262e; background: #fff; border: 1px solid #c8c8d1; border-radius: 50%;
+  box-shadow: 0 2px 7px rgba(0,0,0,.3); cursor: grab; z-index: 70;
+}
+.media-rotate-handle::before { content: ''; position: absolute; right: 29px; top: 50%; width: 17px; height: 1px; background: #8b5cf6; }
+.media-rotate-handle:active { cursor: grabbing; }
+.media-rotate-handle svg { width: 15px; height: 15px; }
+
 /* Visual elements editor */
 .elements-section { padding: 0.75rem !important; }
 .elements-launch {
