@@ -1,6 +1,7 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import type { ObjectFitMode, OutputFormat, OverlayItem, SubtitleItem } from '../types/editor';
+import type { AnalyzedClip, StoryShot } from '../types/autoEdit';
 
 let ffmpeg: FFmpeg | null = null;
 
@@ -203,6 +204,49 @@ export async function processVideo(
     const exitCode = await instance.exec(args);
     if (exitCode !== 0) throw new Error(`FFmpeg export failed with code ${exitCode}.`);
     const data = await instance.readFile(outputName);
+    return new Blob([new Uint8Array(data as Uint8Array)], { type: 'video/mp4' });
+  } finally {
+    instance.off('progress', progressHandler);
+    await Promise.all(createdFiles.map((name) => instance.deleteFile(name).catch(() => undefined)));
+  }
+}
+
+export async function processAutoEditSequence(
+  clips: AnalyzedClip[],
+  shots: StoryShot[],
+  format: OutputFormat,
+  onProgress?: (progress: number) => void,
+) {
+  if (!shots.length) throw new Error('Add at least one shot to the first cut.');
+  const instance = await loadFFmpeg();
+  const runId = Date.now().toString(36);
+  const { width, height } = outputSize(format);
+  const createdFiles: string[] = [];
+  const segments: string[] = [];
+  const clipMap = new Map(clips.map((clip) => [clip.id, clip]));
+  const progressHandler = ({ progress }: { progress: number }) => onProgress?.(Math.max(0, Math.min(.98, progress)));
+  instance.on('progress', progressHandler);
+  try {
+    for (let index = 0; index < shots.length; index += 1) {
+      const shot = shots[index]; const clip = clipMap.get(shot.clipId);
+      if (!clip) continue;
+      const inputName = `auto-input-${runId}-${index}.${clip.file.name.split('.').pop() || 'mp4'}`;
+      const segmentName = `auto-segment-${runId}-${index}.mp4`;
+      createdFiles.push(inputName, segmentName); segments.push(segmentName);
+      await instance.writeFile(inputName, await fetchFile(clip.file));
+      const scale = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1`;
+      const exitCode = await instance.exec(['-ss', String(shot.start), '-t', String(Math.max(.2, shot.end - shot.start)), '-i', inputName, '-vf', scale, '-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-movflags', '+faststart', segmentName]);
+      if (exitCode !== 0) throw new Error(`Could not render shot ${index + 1}.`);
+      onProgress?.((index + .7) / (shots.length + 1));
+    }
+    if (!segments.length) throw new Error('The first cut contains no usable shots.');
+    const listName = `auto-list-${runId}.txt`; const outputName = `auto-output-${runId}.mp4`;
+    createdFiles.push(listName, outputName);
+    await instance.writeFile(listName, new TextEncoder().encode(segments.map((name) => `file '${name}'`).join('\n')));
+    let exitCode = await instance.exec(['-f', 'concat', '-safe', '0', '-i', listName, '-c', 'copy', '-movflags', '+faststart', outputName]);
+    if (exitCode !== 0) exitCode = await instance.exec(['-f', 'concat', '-safe', '0', '-i', listName, '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-movflags', '+faststart', outputName]);
+    if (exitCode !== 0) throw new Error('Could not assemble the first cut.');
+    const data = await instance.readFile(outputName); onProgress?.(1);
     return new Blob([new Uint8Array(data as Uint8Array)], { type: 'video/mp4' });
   } finally {
     instance.off('progress', progressHandler);

@@ -2,14 +2,15 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import VideoPreview from './components/VideoPreview';
 import EditorControls from './components/EditorControls';
 import HowItWorks from './components/HowItWorks';
+import AutoEditStudio from './components/AutoEditStudio';
 import { processVideo } from './utils/ffmpegUtils';
-import { BookOpen, Coffee, Download, Menu, Sparkles, X } from 'lucide-react';
+import { BookOpen, Coffee, Download, Menu, Sparkles, WandSparkles, X } from 'lucide-react';
 import type { ObjectFitMode, OutputFormat, OverlayItem, SubtitleItem } from './types/editor';
 
 function App() {
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
-  const [page, setPage] = useState<'editor' | 'how'>(
-    window.location.hash === '#how-it-works' ? 'how' : 'editor'
+  const [page, setPage] = useState<'editor' | 'how' | 'auto'>(
+    window.location.hash === '#how-it-works' ? 'how' : window.location.hash === '#auto-edit' ? 'auto' : 'editor'
   );
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [lutFiles, setLutFiles] = useState<File[]>([]);
@@ -41,7 +42,7 @@ function App() {
 
   useEffect(() => {
     const handleHashChange = () => {
-      setPage(window.location.hash === '#how-it-works' ? 'how' : 'editor');
+      setPage(window.location.hash === '#how-it-works' ? 'how' : window.location.hash === '#auto-edit' ? 'auto' : 'editor');
       setIsHeaderMenuOpen(false);
     };
 
@@ -58,6 +59,12 @@ function App() {
   const goToHowItWorks = useCallback(() => {
     window.location.hash = 'how-it-works';
     setPage('how');
+    setIsHeaderMenuOpen(false);
+  }, []);
+
+  const goToAutoEdit = useCallback(() => {
+    window.location.hash = 'auto-edit';
+    setPage('auto');
     setIsHeaderMenuOpen(false);
   }, []);
 
@@ -197,6 +204,9 @@ function App() {
             : <Menu style={{ width: 16, height: 16 }} />}
         </button>
         <div className={`header-actions ${isHeaderMenuOpen ? 'open' : ''}`}>
+          <button className="header-action-btn ai-edit-btn" onClick={goToAutoEdit}>
+            <WandSparkles style={{ width: 14, height: 14 }} /> AI Auto Edit
+          </button>
           <button className="header-action-btn info-btn" onClick={goToHowItWorks}>
             <BookOpen style={{ width: 14, height: 14 }} />
             How it works
@@ -215,6 +225,8 @@ function App() {
 
       {page === 'how' ? (
         <HowItWorks onBack={goToEditor} />
+      ) : page === 'auto' ? (
+        <AutoEditStudio onBack={goToEditor} onOpenClip={(file) => { handleVideoUpload(file); goToEditor(); }} />
       ) : (
         <main className="app-main">
           <VideoPreview
