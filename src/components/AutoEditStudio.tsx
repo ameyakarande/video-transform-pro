@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowUp, Bot, Check, Download, Film, GripVertical, LoaderCircle, Play, Plus, RotateCcw, Sparkles, Trash2, Upload, WandSparkles } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Bot, Check, Download, Expand, Film, GripVertical, Library, LoaderCircle, PanelRight, Pause, Play, Plus, RotateCcw, Sparkles, Trash2, Upload, WandSparkles } from 'lucide-react';
 import type { AnalyzedClip, AutoEditBrief, StoryRole, StoryShot } from '../types/autoEdit';
 import { analyzeClip, createStoryline } from '../utils/autoEditAnalysis';
 import { processAutoEditSequence } from '../utils/ffmpegUtils';
@@ -12,9 +12,10 @@ export default function AutoEditStudio({ onBack, onOpenClip }: Props) {
   const [shots, setShots] = useState<StoryShot[]>([]);
   const [brief, setBrief] = useState<AutoEditBrief>({ prompt: '', style: 'cinematic', targetDuration: 30, format: 'youtube' });
   const [selectedShotId, setSelectedShotId] = useState('');
+  const [mediaOpen, setMediaOpen] = useState(true); const [briefOpen, setBriefOpen] = useState(true); const [playing, setPlaying] = useState(false);
   const [analyzing, setAnalyzing] = useState(false); const [analysisProgress, setAnalysisProgress] = useState(0);
   const [exporting, setExporting] = useState(false); const [exportProgress, setExportProgress] = useState(0); const [error, setError] = useState('');
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null); const previewRef = useRef<HTMLDivElement>(null);
   const clipsRef = useRef<AnalyzedClip[]>([]);
   useEffect(() => { clipsRef.current = clips; }, [clips]);
   useEffect(() => () => clipsRef.current.forEach((clip) => URL.revokeObjectURL(clip.url)), []);
@@ -46,7 +47,8 @@ export default function AutoEditStudio({ onBack, onOpenClip }: Props) {
     finally { setAnalyzing(false); }
   };
 
-  const generate = () => { const next = createStoryline(clips, brief); setShots(next); setSelectedShotId(next[0]?.id || ''); };
+  const generate = () => { const next = createStoryline(clips, brief); setShots(next); setSelectedShotId(next[0]?.id || ''); setMediaOpen(false); setBriefOpen(false); };
+  const togglePlayback = () => { const video = videoRef.current; if (!video) return; if (video.paused) { if (selectedShot && (video.currentTime < selectedShot.start || video.currentTime >= selectedShot.end)) video.currentTime = selectedShot.start; void video.play(); } else video.pause(); };
   const move = (index: number, direction: -1 | 1) => setShots((current) => { const target = index + direction; if (target < 0 || target >= current.length) return current; const next = [...current]; [next[index], next[target]] = [next[target], next[index]]; return next; });
   const updateShot = (id: string, patch: Partial<StoryShot>) => setShots((current) => current.map((shot) => shot.id === id ? { ...shot, ...patch } : shot));
   const removeClip = (id: string) => { const clip = clipMap.get(id); if (clip) URL.revokeObjectURL(clip.url); setClips((current) => current.filter((item) => item.id !== id)); setShots((current) => current.filter((shot) => shot.clipId !== id)); };
@@ -58,8 +60,8 @@ export default function AutoEditStudio({ onBack, onOpenClip }: Props) {
   };
 
   return <main className="auto-edit-page">
-    <div className="auto-edit-topbar"><button onClick={onBack}><ArrowLeft /> Manual editor</button><div><span><WandSparkles /></span><div><strong>AI Auto Edit</strong><small>Turn raw clips into an editable first cut</small></div></div><div className="auto-edit-status"><span>{clips.length}/20 clips</span><span>{time(totalDuration)} cut</span></div></div>
-    <div className="auto-edit-grid">
+    <div className="auto-edit-topbar"><button onClick={onBack}><ArrowLeft /> Manual editor</button><div><span><WandSparkles /></span><div><strong>AI Auto Edit</strong><small>Editable first cut</small></div></div><div className="auto-edit-toolbar"><button className={mediaOpen ? 'active' : ''} onClick={() => setMediaOpen((value) => !value)}><Library /> Media <b>{clips.length}</b></button><button className={briefOpen ? 'active' : ''} onClick={() => setBriefOpen((value) => !value)}><PanelRight /> Brief</button><span>{time(totalDuration)}</span></div></div>
+    <div className={`auto-edit-grid ${mediaOpen ? '' : 'media-closed'} ${briefOpen ? '' : 'brief-closed'}`}>
       <aside className="auto-media-panel">
         <div className="auto-panel-title"><div><strong>Media</strong><small>Local analysis · originals stay in browser</small></div><label><Plus /><input hidden multiple type="file" accept="video/*" onChange={(event) => { void addFiles(Array.from(event.target.files || [])); event.target.value = ''; }} /></label></div>
         {!clips.length && <label className="auto-dropzone"><Upload /><strong>Upload your raw footage</strong><span>Select 2–20 video clips</span><input hidden multiple type="file" accept="video/*" onChange={(event) => void addFiles(Array.from(event.target.files || []))} /></label>}
@@ -68,7 +70,7 @@ export default function AutoEditStudio({ onBack, onOpenClip }: Props) {
       </aside>
 
       <section className="auto-workspace">
-        <div className="auto-preview">{selectedClip ? <><video ref={videoRef} key={selectedClip.id} src={selectedClip.url} controls /><div className="auto-preview-badge"><Play /> {selectedShot?.role} · {time(selectedShot?.start || 0)}–{time(selectedShot?.end || 0)}</div></> : <div className="auto-preview-empty"><Film /><span>Your generated sequence will preview here</span></div>}</div>
+        <div className="auto-preview" ref={previewRef}>{selectedClip ? <><video ref={videoRef} key={selectedClip.id} src={selectedClip.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onClick={togglePlayback} /><button className="auto-preview-play" onClick={togglePlayback} aria-label={playing ? 'Pause' : 'Play'}>{playing ? <Pause /> : <Play />}</button><button className="auto-preview-fullscreen" onClick={() => void previewRef.current?.requestFullscreen()}><Expand /> Fullscreen</button><div className="auto-preview-badge">{selectedShot?.role} · {time(selectedShot?.start || 0)}–{time(selectedShot?.end || 0)}</div></> : <div className="auto-preview-empty"><Film /><span>Your generated sequence will preview here</span></div>}</div>
         <div className="auto-story-header"><div><strong>Editable first cut</strong><small>{shots.length ? `${shots.length} shots · ${time(totalDuration)}` : 'Generate a story to build the sequence'}</small></div>{shots.length > 0 && <><button onClick={generate}><RotateCcw /> Regenerate</button><button className="auto-export" disabled={exporting} onClick={() => void exportFirstCut()}>{exporting ? <LoaderCircle className="spin" /> : <Download />}{exporting ? `${Math.round(exportProgress * 100)}%` : 'Export first cut'}</button></>}</div>
         <div className="auto-timeline">{shots.map((shot, index) => { const clip = clipMap.get(shot.clipId); if (!clip) return null; return <article key={shot.id} className={`auto-story-shot ${selectedShot?.id === shot.id ? 'active' : ''}`} onClick={() => setSelectedShotId(shot.id)}><GripVertical /><img src={clip.thumbnail} /><div className="auto-shot-main"><div><span className={`role-${shot.role}`}>{shot.role}</span><strong>{clip.file.name}</strong></div><input value={shot.note} onChange={(event) => updateShot(shot.id, { note: event.target.value })} onClick={(event) => event.stopPropagation()} /></div><div className="auto-shot-trim"><label>In<input type="number" min="0" max={shot.end - .2} step=".1" value={shot.start.toFixed(1)} onChange={(event) => updateShot(shot.id, { start: Math.max(0, Number(event.target.value)) })} /></label><label>Out<input type="number" min={shot.start + .2} max={clip.duration} step=".1" value={shot.end.toFixed(1)} onChange={(event) => updateShot(shot.id, { end: Math.min(clip.duration, Number(event.target.value)) })} /></label></div><select value={shot.role} onChange={(event) => updateShot(shot.id, { role: event.target.value as StoryRole })}><option value="hook">Hook</option><option value="setup">Setup</option><option value="development">Development</option><option value="highlight">Highlight</option><option value="ending">Ending</option></select><div className="auto-shot-actions"><button disabled={index === 0} onClick={(event) => { event.stopPropagation(); move(index, -1); }}><ArrowUp /></button><button disabled={index === shots.length - 1} onClick={(event) => { event.stopPropagation(); move(index, 1); }}><ArrowDown /></button><button onClick={(event) => { event.stopPropagation(); setShots((current) => current.filter((item) => item.id !== shot.id)); }}><Trash2 /></button></div></article>; })}</div>
       </section>
