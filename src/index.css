@@ -1297,6 +1297,47 @@ body {
   .yt-time { font-size: .6rem; }
 }
 
+/* Reference look matcher */
+.look-match-section { padding: .75rem !important; }
+.look-match-launch { width: 100%; display: flex; align-items: center; gap: 9px; padding: 10px; color: var(--text); background: linear-gradient(135deg, rgba(139,92,246,.16), rgba(250,235,145,.08)); border: 1px solid rgba(139,92,246,.38); border-radius: 9px; cursor: pointer; text-align: left; }
+.look-match-launch > span { width: 32px; height: 32px; display: grid; place-items: center; color: #17131f; background: linear-gradient(135deg, #f8efa8, #b997ff); border-radius: 8px; }
+.look-match-launch svg { width: 16px; }
+.look-match-launch div { min-width: 0; flex: 1; display: grid; gap: 2px; }
+.look-match-launch strong { font-size: .72rem; }
+.look-match-launch small { color: var(--text-dim); font-size: .55rem; }
+.look-match-launch b { color: var(--text-dim); }
+.look-match-panel { display: grid; gap: 10px; margin-top: 9px; padding: 10px; background: #101010; border: 1px solid var(--border); border-radius: 10px; }
+.look-source-tabs label { min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--text-secondary); background: var(--bg-raised); border: 1px dashed var(--border-hover); border-radius: 8px; cursor: pointer; font-size: .65rem; }
+.look-source-tabs label:hover { color: var(--accent); border-color: var(--accent); }
+.look-source-tabs svg { width: 15px; }
+.youtube-reference-entry { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.youtube-reference-entry > div { min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 8px; background: var(--bg-raised); border: 1px solid var(--border); border-radius: 7px; }
+.youtube-reference-entry svg { width: 13px; color: var(--text-dim); }
+.youtube-reference-entry input { min-width: 0; width: 100%; height: 34px; color: var(--text); background: transparent; border: 0; outline: 0; font-size: .62rem; }
+.youtube-reference-entry button { padding: 0 10px; color: #171717; background: var(--accent); border: 0; border-radius: 7px; font-size: .6rem; font-weight: 700; cursor: pointer; }
+.youtube-reference-entry button:disabled { opacity: .45; cursor: not-allowed; }
+.youtube-reference-note { margin: -3px 0 0; color: var(--text-dim); font-size: .52rem; line-height: 1.4; }
+.look-reference-preview { position: relative; overflow: hidden; background: #080808; border: 1px solid var(--border); border-radius: 8px; }
+.look-reference-preview > img { width: 100%; max-height: 150px; display: block; object-fit: cover; }
+.look-reference-preview > div { display: flex; align-items: center; gap: 5px; padding: 7px; color: var(--text-secondary); font-size: .55rem; }
+.look-reference-preview svg { width: 12px; }
+.look-reference-preview > button, .look-reference-preview > a { position: absolute; top: 6px; width: 25px; height: 25px; display: grid; place-items: center; color: #fff; background: rgba(0,0,0,.72); border: 0; border-radius: 50%; cursor: pointer; }
+.look-reference-preview > button { right: 6px; }
+.look-reference-preview > a { right: 36px; }
+.look-strength { display: grid; gap: 5px; color: var(--text-secondary); font-size: .6rem; }
+.look-strength span { display: flex; justify-content: space-between; }
+.look-strength input { width: 100%; accent-color: #9d7cff; }
+.look-check { display: flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: .6rem; }
+.look-check input { accent-color: #9d7cff; }
+.look-match-error { margin: 0; padding: 7px; color: #ffb4b4; background: rgba(255,70,70,.1); border-radius: 6px; font-size: .56rem; line-height: 1.4; }
+.look-generate, .look-download { min-height: 36px; display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: 7px; cursor: pointer; font-size: .62rem; font-weight: 700; }
+.look-generate { color: #17131e; background: linear-gradient(135deg, #f8efa8, #b997ff); border: 0; }
+.look-generate:disabled { opacity: .42; cursor: not-allowed; }
+.look-download { color: var(--text); background: var(--bg-raised); border: 1px solid var(--border); }
+.look-generate svg, .look-download svg { width: 14px; }
+.spin { animation: look-spin .8s linear infinite; }
+@keyframes look-spin { to { transform: rotate(360deg); } }
+
 /* Visual elements editor */
 .elements-section { padding: 0.75rem !important; }
 .elements-launch {

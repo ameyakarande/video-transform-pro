@@ -21,6 +21,7 @@ import FilmstripTrim from './FilmstripTrim';
 import { fetchPresetCatalog, getPresetCatalog, type PresetCatalogItem } from '../utils/presetCatalog';
 import type { ObjectFitMode, OutputFormat, OverlayItem, SubtitleItem } from '../types/editor';
 import SocialPublish from './SocialPublish';
+import LookMatcher from './LookMatcher';
 
 const DEFAULT_PRESET_BACKEND_URL = (import.meta.env.VITE_SOCIAL_BACKEND_URL as string | undefined) || 'http://localhost:8787';
 
@@ -329,6 +330,12 @@ const EditorControls: React.FC<EditorControlsProps> = ({
           </div>
         )}
       </div>
+
+      {videoFile && (
+        <div className="ctrl-section look-match-section">
+          <LookMatcher sourceVideo={videoFile} sourceTime={startTime} onApply={(file) => { onLutClear(); onLutToggle(file); }} />
+        </div>
+      )}
 
       {/* Playback & FX Setup */}
       {videoFile && (
